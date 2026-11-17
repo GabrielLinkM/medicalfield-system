@@ -45,8 +45,8 @@
         <div class="col-md-3">
             <div class="card border-0 shadow-sm">
                 <div class="card-body">
-                    <small class="text-muted text-uppercase fw-bold">Prontuários Clínicos</small>
-                    <h3 class="mb-0 mt-1 text-dark fw-bold" th:text="${#lists.size(prontuarios)}">0</h3>
+                    <small class="text-muted text-uppercase fw-bold">Pacientes Cadastrados</small>
+                    <h3 class="mb-0 mt-1 text-dark fw-bold" th:text="${#lists.size(pacientes)}">0</h3>
                 </div>
             </div>
         </div>
@@ -88,7 +88,7 @@
                 <li class="nav-item" role="presentation">
                     <button class="nav-link fw-semibold" id="tab-pacientes" data-bs-toggle="tab"
                             data-bs-target="#pane-pacientes" type="button" role="tab">
-                        Pacientes
+                        Pacientes (<span th:text="${#lists.size(pacientes)}">0</span>)
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
@@ -182,16 +182,41 @@
 
                 <!-- ABA 2: PACIENTES -->
                 <div class="tab-pane fade" id="pane-pacientes" role="tabpanel">
+                    <div class="card bg-light border mb-4">
+                        <div class="card-body">
+                            <h6 class="fw-bold text-primary mb-3">Cadastrar Novo Paciente</h6>
+                            <form th:action="@{/admin/pacientes}" method="post" class="row g-2">
+                                <div class="col-md-5">
+                                    <label class="form-label small fw-semibold mb-1">Nome Completo do Paciente *</label>
+                                    <input type="text" name="nomePaciente" class="form-control form-control-sm"
+                                           placeholder="Ex: Maria da Silva" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-semibold mb-1">CPF / Documento</label>
+                                    <input type="text" name="documentoPaciente" class="form-control form-control-sm"
+                                           placeholder="Somente números">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-semibold mb-1">Data de Nascimento</label>
+                                    <input type="date" name="dataNascimentoPaciente" class="form-control form-control-sm">
+                                </div>
+                                <div class="col-md-2 d-flex align-items-end">
+                                    <button type="submit" class="btn btn-primary btn-sm w-100 fw-semibold">Cadastrar Paciente</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
                     <div class="table-responsive">
                         <table class="table table-hover align-middle">
                             <thead class="table-light">
                                 <tr>
                                     <th>Nome do Paciente</th>
                                     <th>CPF / Documento</th>
+                                    <th>Data de Nascimento</th>
                                     <th>Último Manchester</th>
-                                    <th>Total de Atendimentos</th>
+                                    <th>Atendimentos</th>
                                     <th>Status Prontuário</th>
-                                    <th>Última Atualização</th>
                                     <th class="text-end">Ações</th>
                                 </tr>
                             </thead>
@@ -204,29 +229,30 @@
                                 <tr th:each="p : ${pacientes}">
                                     <td class="fw-bold" th:text="${p['nome']}"></td>
                                     <td th:text="${p['cpfExibicao']}"></td>
+                                    <td class="small"
+                                        th:text="${p['dataNascimento'] != null ? #temporals.format(p['dataNascimento'], 'dd/MM/yyyy') : '-'}"></td>
                                     <td>
                                         <span class="badge bg-secondary" th:text="${p['ultimoManchester'] ?: '-'}"></span>
                                     </td>
                                     <td th:text="${p['totalAtendimentos']}"></td>
                                     <td>
-                                        <span th:if="${p['temProntuario']}" class="badge bg-success">Cadastrado</span>
-                                        <span th:unless="${p['temProntuario']}" class="badge bg-warning text-dark">Sem Prontuário</span>
+                                        <span th:if="${p['prontuarioPreenchido']}" class="badge bg-success">Prontuário Completo</span>
+                                        <span th:unless="${p['prontuarioPreenchido']}" class="badge bg-warning text-dark">Pendente Prontuário</span>
                                     </td>
-                                    <td class="small"
-                                        th:text="${p['ultimoAtendimento'] != null ? #temporals.format(p['ultimoAtendimento'], 'dd/MM/yyyy HH:mm') : '-'}"></td>
                                     <td class="text-end text-nowrap">
                                         <button type="button"
                                                 class="btn btn-sm"
-                                                th:classappend="${p['temProntuario']} ? 'btn-outline-primary' : 'btn-primary'"
+                                                th:classappend="${p['prontuarioPreenchido']} ? 'btn-outline-primary' : 'btn-primary'"
                                                 th:data-id="${p['prontuario'] != null ? p['prontuario'].id : ''}"
                                                 th:data-nome="${p['nome']}"
                                                 th:data-cpf="${p['cpf']}"
+                                                th:data-datanascimento="${p['dataNascimento'] != null ? p['dataNascimento'] : ''}"
                                                 th:data-tiposanguineo="${p['prontuario'] != null and p['prontuario'].tipoSanguineo != null ? p['prontuario'].tipoSanguineo : ''}"
                                                 th:data-alergias="${p['prontuario'] != null and p['prontuario'].alergias != null ? p['prontuario'].alergias : ''}"
                                                 th:data-comorbidades="${p['prontuario'] != null and p['prontuario'].comorbidades != null ? p['prontuario'].comorbidades : ''}"
                                                 th:data-usocontinuo="${p['prontuario'] != null and p['prontuario'].medicamentosUsoContinuo != null ? p['prontuario'].medicamentosUsoContinuo : ''}"
                                                 onclick="abrirModalProntuario(this)"
-                                                th:text="${p['temProntuario']} ? 'Editar Prontuário' : 'Criar Prontuário'">
+                                                th:text="${p['prontuarioPreenchido']} ? 'Editar Prontuário' : 'Preencher Prontuário'">
                                         </button>
                                     </td>
                                 </tr>
@@ -251,6 +277,7 @@
                                                 th:data-id="${p['prontuario'] != null ? p['prontuario'].id : ''}"
                                                 th:data-nome="${p['nome']}"
                                                 th:data-cpf="${p['cpf']}"
+                                                th:data-datanascimento="${p['dataNascimento'] != null ? p['dataNascimento'] : ''}"
                                                 th:data-tiposanguineo="${p['prontuario'] != null and p['prontuario'].tipoSanguineo != null ? p['prontuario'].tipoSanguineo : ''}"
                                                 th:data-alergias="${p['prontuario'] != null and p['prontuario'].alergias != null ? p['prontuario'].alergias : ''}"
                                                 th:data-comorbidades="${p['prontuario'] != null and p['prontuario'].comorbidades != null ? p['prontuario'].comorbidades : ''}"
@@ -263,6 +290,7 @@
 
                             <form th:action="@{/admin/prontuarios}" method="post" class="row g-2">
                                 <input type="hidden" name="id" id="inlineProntId">
+                                <input type="hidden" name="dataNascimentoPaciente" id="inlineProntDataNascimento">
                                 <div class="col-md-4">
                                     <label class="form-label small fw-semibold mb-1">Nome do Paciente *</label>
                                     <input type="text" name="nomePaciente" id="inlineProntNome" class="form-control form-control-sm"
@@ -349,6 +377,7 @@
                                                 th:data-id="${pront.id}"
                                                 th:data-nome="${pront.nomePaciente}"
                                                 th:data-cpf="${pront.documentoPaciente ?: ''}"
+                                                th:data-datanascimento="${pront.dataNascimentoPaciente != null ? pront.dataNascimentoPaciente : ''}"
                                                 th:data-tiposanguineo="${pront.tipoSanguineo ?: ''}"
                                                 th:data-alergias="${pront.alergias ?: ''}"
                                                 th:data-comorbidades="${pront.comorbidades ?: ''}"
@@ -467,13 +496,17 @@
                 <div class="modal-body">
                     <input type="hidden" name="id" id="modalProntId">
                     <div class="row g-3">
-                        <div class="col-md-7">
+                        <div class="col-md-5">
                             <label class="form-label fw-semibold">Nome do Paciente *</label>
                             <input type="text" class="form-control" id="modalProntNome" name="nomePaciente" required>
                         </div>
-                        <div class="col-md-5">
+                        <div class="col-md-4">
                             <label class="form-label fw-semibold">CPF / Documento</label>
                             <input type="text" class="form-control" id="modalProntCpf" name="documentoPaciente" placeholder="Somente números">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Data de Nascimento</label>
+                            <input type="date" class="form-control" id="modalProntDataNascimento" name="dataNascimentoPaciente">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Tipo Sanguíneo</label>
@@ -557,6 +590,7 @@
         document.getElementById('modalProntId').value = btn.getAttribute('data-id') || '';
         document.getElementById('modalProntNome').value = btn.getAttribute('data-nome') || '';
         document.getElementById('modalProntCpf').value = btn.getAttribute('data-cpf') || '';
+        document.getElementById('modalProntDataNascimento').value = btn.getAttribute('data-datanascimento') || '';
         document.getElementById('modalProntTipoSanguineo').value = btn.getAttribute('data-tiposanguineo') || '';
         document.getElementById('modalProntAlergias').value = btn.getAttribute('data-alergias') || '';
         document.getElementById('modalProntComorbidades').value = btn.getAttribute('data-comorbidades') || '';
@@ -571,6 +605,7 @@
         document.getElementById('inlineProntId').value = opt.getAttribute('data-id') || '';
         document.getElementById('inlineProntNome').value = opt.getAttribute('data-nome') || '';
         document.getElementById('inlineProntCpf').value = opt.getAttribute('data-cpf') || '';
+        document.getElementById('inlineProntDataNascimento').value = opt.getAttribute('data-datanascimento') || '';
         document.getElementById('inlineProntTipoSanguineo').value = opt.getAttribute('data-tiposanguineo') || '';
         document.getElementById('inlineProntAlergias').value = opt.getAttribute('data-alergias') || '';
         document.getElementById('inlineProntComorbidades').value = opt.getAttribute('data-comorbidades') || '';

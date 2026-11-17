@@ -8,6 +8,7 @@ import com.example.medicalfield_central_service.repository.MedicamentoCentralRep
 import com.example.medicalfield_central_service.repository.ProntuarioCentralRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Sort;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.*;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -82,11 +84,12 @@ public class AdminCentralController {
                 p.put("nome", f.getNomePaciente() != null ? f.getNomePaciente() : "Não identificado");
                 p.put("cpf", cpfLimpo != null ? cpfLimpo : "");
                 p.put("cpfExibicao", cpfLimpo != null ? cpfLimpo : "Sem documento");
+                p.put("dataNascimento", prontuarioExistente != null ? prontuarioExistente.getDataNascimentoPaciente() : null);
                 p.put("ultimoManchester", f.getProtocoloManchester());
                 p.put("ultimoAtendimento", f.getSincronizadoEm());
                 p.put("totalAtendimentos", 0);
                 p.put("prontuario", prontuarioExistente);
-                p.put("temProntuario", prontuarioExistente != null);
+                p.put("prontuarioPreenchido", possuiDadosClinicos(prontuarioExistente));
                 pacientesMap.put(chave, p);
             }
 
@@ -94,7 +97,7 @@ public class AdminCentralController {
             existente.put("totalAtendimentos", (int) existente.get("totalAtendimentos") + 1);
         }
 
-        // Garante que pacientes que só possuem prontuário também apareçam na lista de pacientes
+        // Garante que pacientes cadastrados diretamente no painel ou via prontuário apareçam na lista
         for (ProntuarioCentral pront : prontuarios) {
             String cpfLimpo = (pront.getDocumentoPaciente() != null && !pront.getDocumentoPaciente().isBlank())
                     ? pront.getDocumentoPaciente().trim()
@@ -109,11 +112,12 @@ public class AdminCentralController {
                 p.put("nome", pront.getNomePaciente() != null ? pront.getNomePaciente() : "Não identificado");
                 p.put("cpf", cpfLimpo != null ? cpfLimpo : "");
                 p.put("cpfExibicao", cpfLimpo != null ? cpfLimpo : "Sem documento");
+                p.put("dataNascimento", pront.getDataNascimentoPaciente());
                 p.put("ultimoManchester", "-");
                 p.put("ultimoAtendimento", pront.getUpdatedAt());
                 p.put("totalAtendimentos", 0);
                 p.put("prontuario", pront);
-                p.put("temProntuario", true);
+                p.put("prontuarioPreenchido", possuiDadosClinicos(pront));
                 pacientesMap.put(chave, p);
             }
         }
@@ -152,10 +156,54 @@ public class AdminCentralController {
         return "admin-dashboard";
     }
 
+    @PostMapping("/pacientes")
+    public String cadastrarPaciente(@RequestParam String nomePaciente,
+                                    @RequestParam(required = false) String documentoPaciente,
+                                    @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataNascimentoPaciente,
+                                    RedirectAttributes redirectAttributes) {
+        LocalDateTime agora = LocalDateTime.now();
+        String nomeLimpo = nomePaciente != null ? nomePaciente.trim() : "Não identificado";
+        String cpfLimpo = normalizarCpf(documentoPaciente);
+
+        ProntuarioCentral registro = null;
+        if (cpfLimpo != null) {
+            registro = prontuarioRepository.findFirstByDocumentoPaciente(cpfLimpo).orElse(null);
+        }
+        if (registro == null && !nomeLimpo.isBlank()) {
+            registro = prontuarioRepository.findFirstByNomePacienteIgnoreCase(nomeLimpo).orElse(null);
+        }
+
+        boolean jaExistia = (registro != null);
+        if (!jaExistia) {
+            registro = ProntuarioCentral.builder()
+                    .id(UUID.randomUUID())
+                    .dataCriacao(agora)
+                    .build();
+        }
+
+        registro.setNomePaciente(nomeLimpo);
+        if (cpfLimpo != null) {
+            registro.setDocumentoPaciente(cpfLimpo);
+        }
+        if (dataNascimentoPaciente != null) {
+            registro.setDataNascimentoPaciente(dataNascimentoPaciente);
+        }
+        registro.setUpdatedAt(agora);
+
+        prontuarioRepository.save(registro);
+
+        redirectAttributes.addFlashAttribute(
+                "mensagemSucesso",
+                jaExistia ? "Dados do paciente " + nomeLimpo + " atualizados!" : "Paciente " + nomeLimpo + " cadastrado com sucesso!"
+        );
+        return "redirect:/admin";
+    }
+
     @PostMapping("/prontuarios")
     public String salvarProntuario(@RequestParam(required = false) UUID id,
                                    @RequestParam String nomePaciente,
                                    @RequestParam(required = false) String documentoPaciente,
+                                   @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataNascimentoPaciente,
                                    @RequestParam(required = false) String tipoSanguineo,
                                    @RequestParam(required = false) String alergias,
                                    @RequestParam(required = false) String comorbidades,
@@ -164,11 +212,7 @@ public class AdminCentralController {
         LocalDateTime agora = LocalDateTime.now();
 
         String nomeLimpo = nomePaciente != null ? nomePaciente.trim() : "Não identificado";
-        String cpfLimpo = null;
-        if (documentoPaciente != null && !documentoPaciente.isBlank()) {
-            String digits = documentoPaciente.replaceAll("\\D", "");
-            cpfLimpo = digits.isEmpty() ? documentoPaciente.trim() : digits;
-        }
+        String cpfLimpo = normalizarCpf(documentoPaciente);
 
         ProntuarioCentral prontuario = null;
 
@@ -192,6 +236,9 @@ public class AdminCentralController {
         prontuario.setNomePaciente(nomeLimpo);
         if (cpfLimpo != null) {
             prontuario.setDocumentoPaciente(cpfLimpo);
+        }
+        if (dataNascimentoPaciente != null) {
+            prontuario.setDataNascimentoPaciente(dataNascimentoPaciente);
         }
         prontuario.setTipoSanguineo(tipoSanguineo != null && !tipoSanguineo.isBlank() ? tipoSanguineo.trim() : null);
         prontuario.setAlergias(alergias != null && !alergias.isBlank() ? alergias.trim() : null);
@@ -285,5 +332,23 @@ public class AdminCentralController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
+    }
+
+    private String normalizarCpf(String documentoPaciente) {
+        if (documentoPaciente == null || documentoPaciente.isBlank()) {
+            return null;
+        }
+        String digits = documentoPaciente.replaceAll("\\D", "");
+        return digits.isEmpty() ? documentoPaciente.trim() : digits;
+    }
+
+    private boolean possuiDadosClinicos(ProntuarioCentral p) {
+        if (p == null) {
+            return false;
+        }
+        return (p.getTipoSanguineo() != null && !p.getTipoSanguineo().isBlank())
+                || (p.getAlergias() != null && !p.getAlergias().isBlank())
+                || (p.getComorbidades() != null && !p.getComorbidades().isBlank())
+                || (p.getMedicamentosUsoContinuo() != null && !p.getMedicamentosUsoContinuo().isBlank());
     }
 }
