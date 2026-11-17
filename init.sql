@@ -1,0 +1,2 @@
+CREATE DATABASE medicalfield_central;
+CREATE DATABASE medicalfield_audit;

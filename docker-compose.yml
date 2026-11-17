@@ -1,0 +1,83 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: medicalfield-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - medicalfield-net
+
+  audit-service:
+    build: ./medicalfield-audit-service
+    container_name: medicalfield-audit
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 8082
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: medicalfield_audit
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    networks:
+      - medicalfield-net
+
+  pdf-service:
+    build: ./medicalfield-pdf-mail-service
+    container_name: medicalfield-pdf
+    restart: unless-stopped
+    environment:
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      DEFAULT_HOSPITAL_EMAIL: ${DEFAULT_HOSPITAL_EMAIL}
+    volumes:
+      - pdf_storage:/app/pdfs
+    networks:
+      - medicalfield-net
+
+  central-service:
+    build: ./medicalfield-central-service
+    container_name: medicalfield-central
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      audit-service:
+        condition: service_started
+      pdf-service:
+        condition: service_started
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/medicalfield_central
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      JWT_SECRET: ${JWT_SECRET}
+      AUDIT_BASE_URL: http://audit-service:8082/api/v1/auditoria
+      PDF_BASE_URL: http://pdf-service:8083/api/v1/documentos
+    networks:
+      - medicalfield-net
+
+volumes:
+  postgres_data:
+  pdf_storage:
+
+networks:
+  medicalfield-net:
+    driver: bridge
