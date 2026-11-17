@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import java.time.LocalDateTime;
 import java.util.*;
 
 @Controller
@@ -53,20 +54,39 @@ public class AdminCentralController {
                 Sort.by(Sort.Direction.DESC, "sincronizadoEm")
         );
 
-        // Agrupa pacientes únicos a partir das fichas sincronizadas
+        List<ProntuarioCentral> prontuarios = prontuarioRepository.findAll(
+                Sort.by(Sort.Direction.DESC, "updatedAt")
+        );
+
+        // Agrupa pacientes únicos a partir das fichas sincronizadas e vincula o prontuário existente
         Map pacientesMap = new LinkedHashMap();
         for (FichaAtendimentoCentral f : atendimentos) {
-            String chave = (f.getDocumentoPaciente() != null && !f.getDocumentoPaciente().isBlank())
-                    ? f.getDocumentoPaciente()
-                    : (f.getNomePaciente() != null ? f.getNomePaciente().toLowerCase() : f.getId().toString());
+            String cpfLimpo = (f.getDocumentoPaciente() != null && !f.getDocumentoPaciente().isBlank())
+                    ? f.getDocumentoPaciente().trim()
+                    : null;
+
+            String chave = (cpfLimpo != null)
+                    ? cpfLimpo
+                    : (f.getNomePaciente() != null ? f.getNomePaciente().trim().toLowerCase() : f.getId().toString());
 
             if (!pacientesMap.containsKey(chave)) {
+                ProntuarioCentral prontuarioExistente = null;
+                if (cpfLimpo != null) {
+                    prontuarioExistente = prontuarioRepository.findFirstByDocumentoPaciente(cpfLimpo).orElse(null);
+                }
+                if (prontuarioExistente == null && f.getNomePaciente() != null && !f.getNomePaciente().isBlank()) {
+                    prontuarioExistente = prontuarioRepository.findFirstByNomePacienteIgnoreCase(f.getNomePaciente().trim()).orElse(null);
+                }
+
                 Map p = new HashMap();
                 p.put("nome", f.getNomePaciente() != null ? f.getNomePaciente() : "Não identificado");
-                p.put("cpf", f.getDocumentoPaciente() != null ? f.getDocumentoPaciente() : "Sem documento");
+                p.put("cpf", cpfLimpo != null ? cpfLimpo : "");
+                p.put("cpfExibicao", cpfLimpo != null ? cpfLimpo : "Sem documento");
                 p.put("ultimoManchester", f.getProtocoloManchester());
                 p.put("ultimoAtendimento", f.getSincronizadoEm());
                 p.put("totalAtendimentos", 0);
+                p.put("prontuario", prontuarioExistente);
+                p.put("temProntuario", prontuarioExistente != null);
                 pacientesMap.put(chave, p);
             }
 
@@ -74,9 +94,29 @@ public class AdminCentralController {
             existente.put("totalAtendimentos", (int) existente.get("totalAtendimentos") + 1);
         }
 
-        List<ProntuarioCentral> prontuarios = prontuarioRepository.findAll(
-                Sort.by(Sort.Direction.DESC, "updatedAt")
-        );
+        // Garante que pacientes que só possuem prontuário também apareçam na lista de pacientes
+        for (ProntuarioCentral pront : prontuarios) {
+            String cpfLimpo = (pront.getDocumentoPaciente() != null && !pront.getDocumentoPaciente().isBlank())
+                    ? pront.getDocumentoPaciente().trim()
+                    : null;
+
+            String chave = (cpfLimpo != null)
+                    ? cpfLimpo
+                    : (pront.getNomePaciente() != null ? pront.getNomePaciente().trim().toLowerCase() : pront.getId().toString());
+
+            if (!pacientesMap.containsKey(chave)) {
+                Map p = new HashMap();
+                p.put("nome", pront.getNomePaciente() != null ? pront.getNomePaciente() : "Não identificado");
+                p.put("cpf", cpfLimpo != null ? cpfLimpo : "");
+                p.put("cpfExibicao", cpfLimpo != null ? cpfLimpo : "Sem documento");
+                p.put("ultimoManchester", "-");
+                p.put("ultimoAtendimento", pront.getUpdatedAt());
+                p.put("totalAtendimentos", 0);
+                p.put("prontuario", pront);
+                p.put("temProntuario", true);
+                pacientesMap.put(chave, p);
+            }
+        }
 
         List<MedicamentoCentral> medicamentos = medicamentoRepository.findAll(Sort.by("nome"));
 
@@ -110,6 +150,59 @@ public class AdminCentralController {
         model.addAttribute("auditoriaOnline", auditoriaOnline);
 
         return "admin-dashboard";
+    }
+
+    @PostMapping("/prontuarios")
+    public String salvarProntuario(@RequestParam(required = false) UUID id,
+                                   @RequestParam String nomePaciente,
+                                   @RequestParam(required = false) String documentoPaciente,
+                                   @RequestParam(required = false) String tipoSanguineo,
+                                   @RequestParam(required = false) String alergias,
+                                   @RequestParam(required = false) String comorbidades,
+                                   @RequestParam(required = false) String medicamentosUsoContinuo,
+                                   RedirectAttributes redirectAttributes) {
+        LocalDateTime agora = LocalDateTime.now();
+
+        String nomeLimpo = nomePaciente != null ? nomePaciente.trim() : "Não identificado";
+        String cpfLimpo = null;
+        if (documentoPaciente != null && !documentoPaciente.isBlank()) {
+            String digits = documentoPaciente.replaceAll("\\D", "");
+            cpfLimpo = digits.isEmpty() ? documentoPaciente.trim() : digits;
+        }
+
+        ProntuarioCentral prontuario = null;
+
+        if (id != null) {
+            prontuario = prontuarioRepository.findById(id).orElse(null);
+        }
+        if (prontuario == null && cpfLimpo != null) {
+            prontuario = prontuarioRepository.findFirstByDocumentoPaciente(cpfLimpo).orElse(null);
+        }
+        if (prontuario == null && !nomeLimpo.isBlank()) {
+            prontuario = prontuarioRepository.findFirstByNomePacienteIgnoreCase(nomeLimpo).orElse(null);
+        }
+
+        if (prontuario == null) {
+            prontuario = ProntuarioCentral.builder()
+                    .id(UUID.randomUUID())
+                    .dataCriacao(agora)
+                    .build();
+        }
+
+        prontuario.setNomePaciente(nomeLimpo);
+        if (cpfLimpo != null) {
+            prontuario.setDocumentoPaciente(cpfLimpo);
+        }
+        prontuario.setTipoSanguineo(tipoSanguineo != null && !tipoSanguineo.isBlank() ? tipoSanguineo.trim() : null);
+        prontuario.setAlergias(alergias != null && !alergias.isBlank() ? alergias.trim() : null);
+        prontuario.setComorbidades(comorbidades != null && !comorbidades.isBlank() ? comorbidades.trim() : null);
+        prontuario.setMedicamentosUsoContinuo(medicamentosUsoContinuo != null && !medicamentosUsoContinuo.isBlank() ? medicamentosUsoContinuo.trim() : null);
+        prontuario.setUpdatedAt(agora);
+
+        prontuarioRepository.save(prontuario);
+
+        redirectAttributes.addFlashAttribute("mensagemSucesso", "Prontuário salvo com sucesso para " + nomeLimpo + "!");
+        return "redirect:/admin";
     }
 
     @PostMapping("/medicamentos")

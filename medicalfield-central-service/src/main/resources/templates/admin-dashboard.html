@@ -190,24 +190,45 @@
                                     <th>CPF / Documento</th>
                                     <th>Último Manchester</th>
                                     <th>Total de Atendimentos</th>
+                                    <th>Status Prontuário</th>
                                     <th>Última Atualização</th>
+                                    <th class="text-end">Ações</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr th:if="${#lists.isEmpty(pacientes)}">
-                                    <td colspan="5" class="text-center text-muted py-4">
+                                    <td colspan="7" class="text-center text-muted py-4">
                                         Nenhum paciente registrado.
                                     </td>
                                 </tr>
                                 <tr th:each="p : ${pacientes}">
                                     <td class="fw-bold" th:text="${p['nome']}"></td>
-                                    <td th:text="${p['cpf']}"></td>
+                                    <td th:text="${p['cpfExibicao']}"></td>
                                     <td>
                                         <span class="badge bg-secondary" th:text="${p['ultimoManchester'] ?: '-'}"></span>
                                     </td>
                                     <td th:text="${p['totalAtendimentos']}"></td>
+                                    <td>
+                                        <span th:if="${p['temProntuario']}" class="badge bg-success">Cadastrado</span>
+                                        <span th:unless="${p['temProntuario']}" class="badge bg-warning text-dark">Sem Prontuário</span>
+                                    </td>
                                     <td class="small"
                                         th:text="${p['ultimoAtendimento'] != null ? #temporals.format(p['ultimoAtendimento'], 'dd/MM/yyyy HH:mm') : '-'}"></td>
+                                    <td class="text-end text-nowrap">
+                                        <button type="button"
+                                                class="btn btn-sm"
+                                                th:classappend="${p['temProntuario']} ? 'btn-outline-primary' : 'btn-primary'"
+                                                th:data-id="${p['prontuario'] != null ? p['prontuario'].id : ''}"
+                                                th:data-nome="${p['nome']}"
+                                                th:data-cpf="${p['cpf']}"
+                                                th:data-tiposanguineo="${p['prontuario'] != null and p['prontuario'].tipoSanguineo != null ? p['prontuario'].tipoSanguineo : ''}"
+                                                th:data-alergias="${p['prontuario'] != null and p['prontuario'].alergias != null ? p['prontuario'].alergias : ''}"
+                                                th:data-comorbidades="${p['prontuario'] != null and p['prontuario'].comorbidades != null ? p['prontuario'].comorbidades : ''}"
+                                                th:data-usocontinuo="${p['prontuario'] != null and p['prontuario'].medicamentosUsoContinuo != null ? p['prontuario'].medicamentosUsoContinuo : ''}"
+                                                onclick="abrirModalProntuario(this)"
+                                                th:text="${p['temProntuario']} ? 'Editar Prontuário' : 'Criar Prontuário'">
+                                        </button>
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
@@ -216,6 +237,78 @@
 
                 <!-- ABA 3: PRONTUÁRIOS CLÍNICOS -->
                 <div class="tab-pane fade" id="pane-prontuarios" role="tabpanel">
+                    <div class="card bg-light border mb-4">
+                        <div class="card-body">
+                            <h6 class="fw-bold text-primary mb-3">Cadastrar ou Atualizar Prontuário Clínico</h6>
+
+                            <div class="row g-2 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold mb-1">Selecionar Paciente Já Cadastrado (opcional):</label>
+                                    <select id="selectPacienteProntuario" class="form-select form-select-sm" onchange="preencherPacienteFormInline(this)">
+                                        <option value="">-- Novo paciente ou digitar manualmente abaixo --</option>
+                                        <option th:each="p : ${pacientes}"
+                                                th:value="${p['nome']}"
+                                                th:data-id="${p['prontuario'] != null ? p['prontuario'].id : ''}"
+                                                th:data-nome="${p['nome']}"
+                                                th:data-cpf="${p['cpf']}"
+                                                th:data-tiposanguineo="${p['prontuario'] != null and p['prontuario'].tipoSanguineo != null ? p['prontuario'].tipoSanguineo : ''}"
+                                                th:data-alergias="${p['prontuario'] != null and p['prontuario'].alergias != null ? p['prontuario'].alergias : ''}"
+                                                th:data-comorbidades="${p['prontuario'] != null and p['prontuario'].comorbidades != null ? p['prontuario'].comorbidades : ''}"
+                                                th:data-usocontinuo="${p['prontuario'] != null and p['prontuario'].medicamentosUsoContinuo != null ? p['prontuario'].medicamentosUsoContinuo : ''}"
+                                                th:text="${p['nome'] + (p['cpf'] != null and !p['cpf'].isEmpty() ? ' (CPF: ' + p['cpf'] + ')' : '')}">
+                                        </option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <form th:action="@{/admin/prontuarios}" method="post" class="row g-2">
+                                <input type="hidden" name="id" id="inlineProntId">
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-semibold mb-1">Nome do Paciente *</label>
+                                    <input type="text" name="nomePaciente" id="inlineProntNome" class="form-control form-control-sm"
+                                           placeholder="Nome completo" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-semibold mb-1">CPF / Documento</label>
+                                    <input type="text" name="documentoPaciente" id="inlineProntCpf" class="form-control form-control-sm"
+                                           placeholder="Somente números">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-semibold mb-1">Tipo Sanguíneo</label>
+                                    <select name="tipoSanguineo" id="inlineProntTipoSanguineo" class="form-select form-select-sm">
+                                        <option value="">N/I</option>
+                                        <option value="A+">A+</option>
+                                        <option value="A-">A-</option>
+                                        <option value="B+">B+</option>
+                                        <option value="B-">B-</option>
+                                        <option value="AB+">AB+</option>
+                                        <option value="AB-">AB-</option>
+                                        <option value="O+">O+</option>
+                                        <option value="O-">O-</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-semibold mb-1">Alergias</label>
+                                    <input type="text" name="alergias" id="inlineProntAlergias" class="form-control form-control-sm"
+                                           placeholder="Ex: Dipirona, Penicilina">
+                                </div>
+                                <div class="col-md-5">
+                                    <label class="form-label small fw-semibold mb-1">Comorbidades / Doenças Crônicas</label>
+                                    <input type="text" name="comorbidades" id="inlineProntComorbidades" class="form-control form-control-sm"
+                                           placeholder="Ex: Hipertensão, Diabetes Tipo 2">
+                                </div>
+                                <div class="col-md-5">
+                                    <label class="form-label small fw-semibold mb-1">Medicamentos de Uso Contínuo</label>
+                                    <input type="text" name="medicamentosUsoContinuo" id="inlineProntUsoContinuo" class="form-control form-control-sm"
+                                           placeholder="Ex: Losartana 50mg, Metformina">
+                                </div>
+                                <div class="col-md-2 d-flex align-items-end">
+                                    <button type="submit" class="btn btn-primary btn-sm w-100 fw-semibold">Salvar Prontuário</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
                     <div class="table-responsive">
                         <table class="table table-hover align-middle">
                             <thead class="table-light">
@@ -226,11 +319,12 @@
                                     <th>Comorbidades</th>
                                     <th>Uso Contínuo</th>
                                     <th>Última Atualização</th>
+                                    <th class="text-end">Ações</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr th:if="${#lists.isEmpty(prontuarios)}">
-                                    <td colspan="6" class="text-center text-muted py-4">
+                                    <td colspan="7" class="text-center text-muted py-4">
                                         Nenhum prontuário clínico registrado até o momento.
                                     </td>
                                 </tr>
@@ -249,6 +343,20 @@
                                     <td class="small" th:text="${pront.medicamentosUsoContinuo != null and !pront.medicamentosUsoContinuo.isEmpty() ? pront.medicamentosUsoContinuo : 'Nenhum'}"></td>
                                     <td class="small"
                                         th:text="${pront.updatedAt != null ? #temporals.format(pront.updatedAt, 'dd/MM/yyyy HH:mm') : '-'}"></td>
+                                    <td class="text-end">
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-primary"
+                                                th:data-id="${pront.id}"
+                                                th:data-nome="${pront.nomePaciente}"
+                                                th:data-cpf="${pront.documentoPaciente ?: ''}"
+                                                th:data-tiposanguineo="${pront.tipoSanguineo ?: ''}"
+                                                th:data-alergias="${pront.alergias ?: ''}"
+                                                th:data-comorbidades="${pront.comorbidades ?: ''}"
+                                                th:data-usocontinuo="${pront.medicamentosUsoContinuo ?: ''}"
+                                                onclick="abrirModalProntuario(this)">
+                                            Editar
+                                        </button>
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
@@ -347,6 +455,66 @@
     </div>
 </div>
 
+<!-- MODAL DE PRONTUÁRIO CLÍNICO -->
+<div class="modal fade" id="modalProntuario" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form th:action="@{/admin/prontuarios}" method="post">
+                <div class="modal-header">
+                    <h5 class="modal-title">Prontuário Clínico do Paciente</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="id" id="modalProntId">
+                    <div class="row g-3">
+                        <div class="col-md-7">
+                            <label class="form-label fw-semibold">Nome do Paciente *</label>
+                            <input type="text" class="form-control" id="modalProntNome" name="nomePaciente" required>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold">CPF / Documento</label>
+                            <input type="text" class="form-control" id="modalProntCpf" name="documentoPaciente" placeholder="Somente números">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Tipo Sanguíneo</label>
+                            <select class="form-select" id="modalProntTipoSanguineo" name="tipoSanguineo">
+                                <option value="">Não informado</option>
+                                <option value="A+">A+</option>
+                                <option value="A-">A-</option>
+                                <option value="B+">B+</option>
+                                <option value="B-">B-</option>
+                                <option value="AB+">AB+</option>
+                                <option value="AB-">AB-</option>
+                                <option value="O+">O+</option>
+                                <option value="O-">O-</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label fw-semibold">Alergias Conhecidas</label>
+                            <input type="text" class="form-control" id="modalProntAlergias" name="alergias"
+                                   placeholder="Ex: Dipirona, Penicilina, Látex ou Nenhuma">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Comorbidades / Doenças Crônicas</label>
+                            <input type="text" class="form-control" id="modalProntComorbidades" name="comorbidades"
+                                   placeholder="Ex: Hipertensão, Diabetes Tipo 2">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Medicamentos de Uso Contínuo</label>
+                            <input type="text" class="form-control" id="modalProntUsoContinuo" name="medicamentosUsoContinuo"
+                                   placeholder="Ex: Losartana 50mg, Metformina">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary fw-semibold">Salvar Prontuário</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <!-- MODAL DE ENVIO DE E-MAIL -->
 <div class="modal fade" id="modalEmail" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
@@ -383,6 +551,30 @@
         document.getElementById('modalNomePaciente').innerText = nomePaciente || 'Não identificado';
         const modal = new bootstrap.Modal(document.getElementById('modalEmail'));
         modal.show();
+    }
+
+    function abrirModalProntuario(btn) {
+        document.getElementById('modalProntId').value = btn.getAttribute('data-id') || '';
+        document.getElementById('modalProntNome').value = btn.getAttribute('data-nome') || '';
+        document.getElementById('modalProntCpf').value = btn.getAttribute('data-cpf') || '';
+        document.getElementById('modalProntTipoSanguineo').value = btn.getAttribute('data-tiposanguineo') || '';
+        document.getElementById('modalProntAlergias').value = btn.getAttribute('data-alergias') || '';
+        document.getElementById('modalProntComorbidades').value = btn.getAttribute('data-comorbidades') || '';
+        document.getElementById('modalProntUsoContinuo').value = btn.getAttribute('data-usocontinuo') || '';
+
+        const modal = new bootstrap.Modal(document.getElementById('modalProntuario'));
+        modal.show();
+    }
+
+    function preencherPacienteFormInline(select) {
+        const opt = select.options[select.selectedIndex];
+        document.getElementById('inlineProntId').value = opt.getAttribute('data-id') || '';
+        document.getElementById('inlineProntNome').value = opt.getAttribute('data-nome') || '';
+        document.getElementById('inlineProntCpf').value = opt.getAttribute('data-cpf') || '';
+        document.getElementById('inlineProntTipoSanguineo').value = opt.getAttribute('data-tiposanguineo') || '';
+        document.getElementById('inlineProntAlergias').value = opt.getAttribute('data-alergias') || '';
+        document.getElementById('inlineProntComorbidades').value = opt.getAttribute('data-comorbidades') || '';
+        document.getElementById('inlineProntUsoContinuo').value = opt.getAttribute('data-usocontinuo') || '';
     }
 </script>
 </body>
