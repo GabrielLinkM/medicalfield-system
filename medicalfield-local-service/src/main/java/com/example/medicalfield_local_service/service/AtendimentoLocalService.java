@@ -1,10 +1,7 @@
 package com.example.medicalfield_local_service.service;
 
 import com.example.medicalfield_local_service.model.*;
-import com.example.medicalfield_local_service.repository.FichaAtendimentoRepository;
-import com.example.medicalfield_local_service.repository.MedicamentoRepository;
-import com.example.medicalfield_local_service.repository.OutboxSyncRepository;
-import com.example.medicalfield_local_service.repository.PacienteRepository;
+import com.example.medicalfield_local_service.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,15 +18,18 @@ public class AtendimentoLocalService {
     private final OutboxSyncRepository outboxRepository;
     private final MedicamentoRepository medicamentoRepository;
     private final PacienteRepository pacienteRepository;
+    private final ProntuarioRepository prontuarioRepository;
 
     public AtendimentoLocalService(FichaAtendimentoRepository atendimentoRepository,
                                  OutboxSyncRepository outboxRepository,
                                  MedicamentoRepository medicamentoRepository,
-                                 PacienteRepository pacienteRepository) {
+                                 PacienteRepository pacienteRepository,
+                                 ProntuarioRepository prontuarioRepository) {
         this.atendimentoRepository = atendimentoRepository;
         this.outboxRepository = outboxRepository;
         this.medicamentoRepository = medicamentoRepository;
         this.pacienteRepository = pacienteRepository;
+        this.prontuarioRepository = prontuarioRepository;
     }
 
     @Transactional
@@ -38,6 +38,8 @@ public class AtendimentoLocalService {
                                              LocalDate dataNascimentoPaciente,
                                              List<UUID> medicamentoIds,
                                              List<Double> medicamentoQtds) {
+        LocalDateTime agora = LocalDateTime.now();
+
         if (ficha.getId() == null) {
             ficha.setId(UUID.randomUUID());
         }
@@ -46,17 +48,15 @@ public class AtendimentoLocalService {
         String cpfLimpo = normalizarCpf(ficha.getDocumentoPaciente());
         ficha.setDocumentoPaciente(cpfLimpo);
 
+        Paciente pacienteResolvido = null;
+
         if (ficha.getPaciente() != null && ficha.getPaciente().getId() != null) {
-            Paciente pacienteExistente = pacienteRepository.findById(ficha.getPaciente().getId()).orElse(null);
-            if (pacienteExistente != null) {
-                if (pacienteExistente.getCpf() == null && cpfLimpo != null) {
-                    pacienteExistente.setCpf(cpfLimpo);
-                    pacienteRepository.save(pacienteExistente);
-                }
-                ficha.setPaciente(pacienteExistente);
+            pacienteResolvido = pacienteRepository.findById(ficha.getPaciente().getId()).orElse(null);
+            if (pacienteResolvido != null && pacienteResolvido.getCpf() == null && cpfLimpo != null) {
+                pacienteResolvido.setCpf(cpfLimpo);
+                pacienteResolvido = pacienteRepository.save(pacienteResolvido);
             }
         } else {
-            Paciente pacienteResolvido = null;
             if (cpfLimpo != null) {
                 pacienteResolvido = pacienteRepository.findByCpf(cpfLimpo).orElse(null);
             }
@@ -67,10 +67,41 @@ public class AtendimentoLocalService {
                         .dataNascimento(dataNascimentoPaciente)
                         .build());
             }
-            ficha.setPaciente(pacienteResolvido);
+        }
+        ficha.setPaciente(pacienteResolvido);
+
+        // 2. Cria ou atualiza o Prontuário Clínico vinculado ao Paciente
+        // 2. Cria ou atualiza o Prontuário Clínico vinculado ao Paciente
+        if (pacienteResolvido != null) {
+            final Paciente pacienteFinal = pacienteResolvido;
+            Prontuario dadosForm = ficha.getProntuario();
+            Prontuario prontuarioResolvido = prontuarioRepository.findByPacienteId(pacienteFinal.getId())
+                    .orElseGet(() -> Prontuario.builder()
+                            .id(UUID.randomUUID())
+                            .paciente(pacienteFinal)
+                            .dataCriacao(agora)
+                            .build());
+
+            if (dadosForm != null) {
+                if (dadosForm.getTipoSanguineo() != null && !dadosForm.getTipoSanguineo().isBlank()) {
+                    prontuarioResolvido.setTipoSanguineo(dadosForm.getTipoSanguineo().trim());
+                }
+                if (dadosForm.getAlergias() != null) {
+                    prontuarioResolvido.setAlergias(dadosForm.getAlergias().trim());
+                }
+                if (dadosForm.getComorbidades() != null) {
+                    prontuarioResolvido.setComorbidades(dadosForm.getComorbidades().trim());
+                }
+                if (dadosForm.getMedicamentosUsoContinuo() != null) {
+                    prontuarioResolvido.setMedicamentosUsoContinuo(dadosForm.getMedicamentosUsoContinuo().trim());
+                }
+            }
+            prontuarioResolvido.setUpdatedAt(agora);
+            prontuarioResolvido = prontuarioRepository.save(prontuarioResolvido);
+            ficha.setProntuario(prontuarioResolvido);
         }
 
-        // 2. Formata os medicamentos administrados com volume em ml (sem baixa de estoque)
+        // 3. Formata os medicamentos administrados com volume em ml
         List<String> medicamentosUsados = new ArrayList<>();
         if (medicamentoIds != null && !medicamentoIds.isEmpty()) {
             for (int i = 0; i < medicamentoIds.size(); i++) {
@@ -97,10 +128,9 @@ public class AtendimentoLocalService {
                 ? String.join(", ", medicamentosUsados)
                 : "Nenhum medicamento administrado");
 
-        // 3. Calcula a Escala de Glasgow
+        // 4. Calcula a Escala de Glasgow
         calcularClassificacaoGlasgow(ficha);
 
-        LocalDateTime agora = LocalDateTime.now();
         if (ficha.getDataHoraAtendimento() == null) {
             ficha.setDataHoraAtendimento(agora);
         }

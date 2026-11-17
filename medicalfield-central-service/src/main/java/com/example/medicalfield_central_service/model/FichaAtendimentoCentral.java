@@ -47,4 +47,8 @@ public class FichaAtendimentoCentral {
     private String profissionalRegistro;
     private LocalDateTime dataHoraAtendimento;
     private LocalDateTime sincronizadoEm;
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "prontuario_id")
+    private ProntuarioCentral prontuario;
 }

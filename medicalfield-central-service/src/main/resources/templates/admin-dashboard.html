@@ -45,8 +45,8 @@
         <div class="col-md-3">
             <div class="card border-0 shadow-sm">
                 <div class="card-body">
-                    <small class="text-muted text-uppercase fw-bold">Pacientes Registrados</small>
-                    <h3 class="mb-0 mt-1 text-dark fw-bold" th:text="${#lists.size(pacientes)}">0</h3>
+                    <small class="text-muted text-uppercase fw-bold">Prontuários Clínicos</small>
+                    <h3 class="mb-0 mt-1 text-dark fw-bold" th:text="${#lists.size(prontuarios)}">0</h3>
                 </div>
             </div>
         </div>
@@ -89,6 +89,12 @@
                     <button class="nav-link fw-semibold" id="tab-pacientes" data-bs-toggle="tab"
                             data-bs-target="#pane-pacientes" type="button" role="tab">
                         Pacientes
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link fw-semibold" id="tab-prontuarios" data-bs-toggle="tab"
+                            data-bs-target="#pane-prontuarios" type="button" role="tab">
+                        Prontuários (<span th:text="${#lists.size(prontuarios)}">0</span>)
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
@@ -208,7 +214,48 @@
                     </div>
                 </div>
 
-                <!-- ABA 3: CATÁLOGO DE MEDICAMENTOS -->
+                <!-- ABA 3: PRONTUÁRIOS CLÍNICOS -->
+                <div class="tab-pane fade" id="pane-prontuarios" role="tabpanel">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Paciente / CPF</th>
+                                    <th>Tipo Sanguíneo</th>
+                                    <th>Alergias</th>
+                                    <th>Comorbidades</th>
+                                    <th>Uso Contínuo</th>
+                                    <th>Última Atualização</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:if="${#lists.isEmpty(prontuarios)}">
+                                    <td colspan="6" class="text-center text-muted py-4">
+                                        Nenhum prontuário clínico registrado até o momento.
+                                    </td>
+                                </tr>
+                                <tr th:each="pront : ${prontuarios}">
+                                    <td>
+                                        <div class="fw-bold" th:text="${pront.nomePaciente}"></div>
+                                        <small class="text-muted"
+                                               th:text="${pront.documentoPaciente != null and !pront.documentoPaciente.isEmpty() ? 'CPF: ' + pront.documentoPaciente : 'Sem CPF'}"></small>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-danger"
+                                              th:text="${pront.tipoSanguineo != null and !pront.tipoSanguineo.isEmpty() ? pront.tipoSanguineo : 'N/I'}"></span>
+                                    </td>
+                                    <td class="small" th:text="${pront.alergias != null and !pront.alergias.isEmpty() ? pront.alergias : 'Nenhuma informada'}"></td>
+                                    <td class="small" th:text="${pront.comorbidades != null and !pront.comorbidades.isEmpty() ? pront.comorbidades : 'Nenhuma informada'}"></td>
+                                    <td class="small" th:text="${pront.medicamentosUsoContinuo != null and !pront.medicamentosUsoContinuo.isEmpty() ? pront.medicamentosUsoContinuo : 'Nenhum'}"></td>
+                                    <td class="small"
+                                        th:text="${pront.updatedAt != null ? #temporals.format(pront.updatedAt, 'dd/MM/yyyy HH:mm') : '-'}"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ABA 4: CATÁLOGO DE MEDICAMENTOS -->
                 <div class="tab-pane fade" id="pane-medicamentos" role="tabpanel">
                     <p class="text-muted small mb-3">
                         Os medicamentos cadastrados aqui são sincronizados automaticamente com as ambulâncias quando estiverem online.
@@ -258,7 +305,7 @@
                     </div>
                 </div>
 
-                <!-- ABA 4: AUDITORIA IMUTÁVEL -->
+                <!-- ABA 5: AUDITORIA IMUTÁVEL -->
                 <div class="tab-pane fade" id="pane-auditoria" role="tabpanel">
                     <div class="alert mb-3"
                          th:classappend="${auditoriaOnline and statusIntegridade['cadeiaIntegra'] == true} ? 'alert-success' : 'alert-warning'">
@@ -301,13 +348,13 @@
 </div>
 
 <!-- MODAL DE ENVIO DE E-MAIL -->
-<div class="modal fade" id="modalEnviarEmail" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="modalEmail" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <form th:action="@{/admin/atendimentos/enviar-email}" method="post">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title">Enviar Prontuário em PDF por E-mail</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <div class="modal-header">
+                    <h5 class="modal-title">Enviar Ficha de Atendimento por E-mail</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
                 </div>
                 <div class="modal-body">
                     <input type="hidden" name="fichaId" id="modalFichaId">
@@ -315,14 +362,14 @@
                         Paciente: <strong id="modalNomePaciente"></strong>
                     </p>
                     <div class="mb-3">
-                        <label for="emailDestino" class="form-label fw-semibold">E-mail do Hospital / Destinatário</label>
+                        <label for="emailDestino" class="form-label fw-semibold">E-mail do Hospital / Destinatário:</label>
                         <input type="email" class="form-control" id="emailDestino" name="emailDestino"
-                               placeholder="emergencia@hospital.com.br" required>
+                               placeholder="hospital@exemplo.com" required>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-success fw-semibold">Gerar PDF e Enviar</button>
+                    <button type="submit" class="btn btn-success">Enviar Ficha (PDF)</button>
                 </div>
             </form>
         </div>
@@ -334,10 +381,9 @@
     function abrirModalEmail(fichaId, nomePaciente) {
         document.getElementById('modalFichaId').value = fichaId;
         document.getElementById('modalNomePaciente').innerText = nomePaciente || 'Não identificado';
-        const modal = new bootstrap.Modal(document.getElementById('modalEnviarEmail'));
+        const modal = new bootstrap.Modal(document.getElementById('modalEmail'));
         modal.show();
     }
 </script>
-
 </body>
 </html>

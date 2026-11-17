@@ -2,8 +2,10 @@ package com.example.medicalfield_central_service.controller;
 
 import com.example.medicalfield_central_service.model.FichaAtendimentoCentral;
 import com.example.medicalfield_central_service.model.MedicamentoCentral;
+import com.example.medicalfield_central_service.model.ProntuarioCentral;
 import com.example.medicalfield_central_service.repository.FichaAtendimentoCentralRepository;
 import com.example.medicalfield_central_service.repository.MedicamentoCentralRepository;
+import com.example.medicalfield_central_service.repository.ProntuarioCentralRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.*;
@@ -22,6 +24,7 @@ public class AdminCentralController {
 
     private final FichaAtendimentoCentralRepository fichaRepository;
     private final MedicamentoCentralRepository medicamentoRepository;
+    private final ProntuarioCentralRepository prontuarioRepository;
     private final RestClient restClient;
 
     @Value("${audit.base.url:http://localhost:8082/api/v1/auditoria}")
@@ -31,9 +34,11 @@ public class AdminCentralController {
     private String pdfBaseUrl;
 
     public AdminCentralController(FichaAtendimentoCentralRepository fichaRepository,
-                                  MedicamentoCentralRepository medicamentoRepository) {
+                                  MedicamentoCentralRepository medicamentoRepository,
+                                  ProntuarioCentralRepository prontuarioRepository) {
         this.fichaRepository = fichaRepository;
         this.medicamentoRepository = medicamentoRepository;
+        this.prontuarioRepository = prontuarioRepository;
         this.restClient = RestClient.create();
     }
 
@@ -69,6 +74,10 @@ public class AdminCentralController {
             existente.put("totalAtendimentos", (int) existente.get("totalAtendimentos") + 1);
         }
 
+        List<ProntuarioCentral> prontuarios = prontuarioRepository.findAll(
+                Sort.by(Sort.Direction.DESC, "updatedAt")
+        );
+
         List<MedicamentoCentral> medicamentos = medicamentoRepository.findAll(Sort.by("nome"));
 
         List logsAuditoria = new ArrayList();
@@ -94,6 +103,7 @@ public class AdminCentralController {
 
         model.addAttribute("atendimentos", atendimentos);
         model.addAttribute("pacientes", pacientesMap.values());
+        model.addAttribute("prontuarios", prontuarios);
         model.addAttribute("medicamentos", medicamentos);
         model.addAttribute("logsAuditoria", logsAuditoria);
         model.addAttribute("statusIntegridade", statusIntegridade);

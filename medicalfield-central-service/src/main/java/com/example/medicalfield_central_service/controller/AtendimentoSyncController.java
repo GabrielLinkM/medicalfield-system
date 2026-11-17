@@ -2,7 +2,9 @@ package com.example.medicalfield_central_service.controller;
 
 import com.example.medicalfield_central_service.dto.FichaSyncRequestDto;
 import com.example.medicalfield_central_service.model.FichaAtendimentoCentral;
+import com.example.medicalfield_central_service.model.ProntuarioCentral;
 import com.example.medicalfield_central_service.repository.FichaAtendimentoCentralRepository;
+import com.example.medicalfield_central_service.repository.ProntuarioCentralRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +20,7 @@ import java.util.UUID;
 public class AtendimentoSyncController {
 
     private final FichaAtendimentoCentralRepository repository;
+    private final ProntuarioCentralRepository prontuarioRepository;
     private final RestClient restClient;
 
     @Value("${audit.service.url:http://localhost:8082/api/v1/auditoria/eventos}")
@@ -26,13 +29,21 @@ public class AtendimentoSyncController {
     @Value("${pdf.service.url:http://localhost:8083/api/v1/documentos/gerar-e-enviar}")
     private String pdfServiceUrl;
 
-    public AtendimentoSyncController(FichaAtendimentoCentralRepository repository) {
+    public AtendimentoSyncController(FichaAtendimentoCentralRepository repository,
+                                     ProntuarioCentralRepository prontuarioRepository) {
         this.repository = repository;
+        this.prontuarioRepository = prontuarioRepository;
         this.restClient = RestClient.create();
     }
 
     @PostMapping("/sync")
     public ResponseEntity<Void> receberFichaSincronizada(@RequestBody FichaSyncRequestDto dto) {
+        LocalDateTime agora = LocalDateTime.now();
+
+        // 1. Persiste ou atualiza o Prontuário Clínico vinculado ao Paciente
+        ProntuarioCentral prontuarioCentral = resolverProntuario(dto, agora);
+
+        // 2. Persiste a Ficha de Atendimento vinculada ao Prontuário
         FichaAtendimentoCentral fichaCentral = FichaAtendimentoCentral.builder()
                 .id(dto.getId() != null ? dto.getId() : UUID.randomUUID())
                 .nomePaciente(dto.getNomePaciente())
@@ -55,21 +66,77 @@ public class AtendimentoSyncController {
                 .observacoes(dto.getObservacoes())
                 .profissionalRegistro(dto.getProfissionalRegistro())
                 .dataHoraAtendimento(dto.getDataHoraAtendimento())
-                .sincronizadoEm(LocalDateTime.now())
+                .sincronizadoEm(agora)
+                .prontuario(prontuarioCentral)
                 .build();
 
         repository.save(fichaCentral);
 
         System.out.println(">>> [CENTRAL SYNC] Ficha " + fichaCentral.getId() +
-                " (" + fichaCentral.getNomePaciente() + ") salva no banco central!");
+                " (" + fichaCentral.getNomePaciente() + ") e Prontuário " +
+                (prontuarioCentral != null ? prontuarioCentral.getId() : "N/A") + " salvos no banco central!");
 
-        // 1. Dispara evento para o Microsservico de Auditoria (Node.js - Porta 8082)
         notificarAuditoria(fichaCentral);
-
-        // 2. Dispara geracao de PDF e envio de E-mail (Python - Porta 8083)
         notificarGeracaoPdf(fichaCentral);
 
         return ResponseEntity.ok().build();
+    }
+
+    private ProntuarioCentral resolverProntuario(FichaSyncRequestDto dto, LocalDateTime agora) {
+        FichaSyncRequestDto.ProntuarioSyncDto pDto = dto.getProntuario();
+        FichaSyncRequestDto.PacienteSyncDto pacDto = dto.getPaciente();
+
+        String cpf = (dto.getDocumentoPaciente() != null && !dto.getDocumentoPaciente().isBlank())
+                ? dto.getDocumentoPaciente().trim()
+                : (pacDto != null ? pacDto.getCpf() : null);
+
+        String nome = (dto.getNomePaciente() != null && !dto.getNomePaciente().isBlank())
+                ? dto.getNomePaciente().trim()
+                : (pacDto != null ? pacDto.getNome() : "Não identificado");
+
+        ProntuarioCentral prontuario = null;
+
+        if (pDto != null && pDto.getId() != null) {
+            prontuario = prontuarioRepository.findById(pDto.getId()).orElse(null);
+        }
+        if (prontuario == null && cpf != null && !cpf.isBlank()) {
+            prontuario = prontuarioRepository.findFirstByDocumentoPaciente(cpf).orElse(null);
+        }
+        if (prontuario == null && nome != null && !nome.isBlank()) {
+            prontuario = prontuarioRepository.findFirstByNomePacienteIgnoreCase(nome).orElse(null);
+        }
+
+        if (prontuario == null) {
+            prontuario = ProntuarioCentral.builder()
+                    .id(pDto != null && pDto.getId() != null ? pDto.getId() : UUID.randomUUID())
+                    .dataCriacao(pDto != null && pDto.getDataCriacao() != null ? pDto.getDataCriacao() : agora)
+                    .build();
+        }
+
+        prontuario.setNomePaciente(nome);
+        if (cpf != null && !cpf.isBlank()) {
+            prontuario.setDocumentoPaciente(cpf);
+        }
+        if (pacDto != null && pacDto.getDataNascimento() != null) {
+            prontuario.setDataNascimentoPaciente(pacDto.getDataNascimento());
+        }
+        if (pDto != null) {
+            if (pDto.getTipoSanguineo() != null && !pDto.getTipoSanguineo().isBlank()) {
+                prontuario.setTipoSanguineo(pDto.getTipoSanguineo().trim());
+            }
+            if (pDto.getAlergias() != null) {
+                prontuario.setAlergias(pDto.getAlergias().trim());
+            }
+            if (pDto.getComorbidades() != null) {
+                prontuario.setComorbidades(pDto.getComorbidades().trim());
+            }
+            if (pDto.getMedicamentosUsoContinuo() != null) {
+                prontuario.setMedicamentosUsoContinuo(pDto.getMedicamentosUsoContinuo().trim());
+            }
+        }
+        prontuario.setUpdatedAt(agora);
+
+        return prontuarioRepository.save(prontuario);
     }
 
     private void notificarAuditoria(FichaAtendimentoCentral ficha) {

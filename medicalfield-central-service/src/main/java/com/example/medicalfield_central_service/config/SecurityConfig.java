@@ -28,6 +28,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/auth/**", "/api/auth/**").permitAll()
                 .requestMatchers("/api/v1/atendimentos/sync").permitAll()
                 .requestMatchers("/api/v1/medicamentos/**").permitAll()
+                .requestMatchers("/prontuario/**", "/api/v1/prontuarios/**").permitAll()
                 .requestMatchers("/admin/login", "/error").permitAll()
                 .requestMatchers("/admin/**").hasRole("MEDICO")
                 .anyRequest().authenticated()

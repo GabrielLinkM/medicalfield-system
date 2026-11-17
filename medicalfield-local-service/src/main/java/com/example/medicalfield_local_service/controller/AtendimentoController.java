@@ -3,8 +3,10 @@ package com.example.medicalfield_local_service.controller;
 import com.example.medicalfield_local_service.dto.LoginResponseDto;
 import com.example.medicalfield_local_service.model.FichaAtendimento;
 import com.example.medicalfield_local_service.model.Medicamento;
+import com.example.medicalfield_local_service.model.Prontuario;
 import com.example.medicalfield_local_service.repository.MedicamentoRepository;
 import com.example.medicalfield_local_service.repository.PacienteRepository;
+import com.example.medicalfield_local_service.repository.ProntuarioRepository;
 import com.example.medicalfield_local_service.service.AtendimentoLocalService;
 import com.example.medicalfield_local_service.service.CatalogoMedicamentoSyncService;
 import com.example.medicalfield_local_service.service.OutboxSyncService;
@@ -30,6 +32,7 @@ public class AtendimentoController {
     private final OutboxSyncService outboxSyncService;
     private final MedicamentoRepository medicamentoRepository;
     private final PacienteRepository pacienteRepository;
+    private final ProntuarioRepository prontuarioRepository;
     private final CatalogoMedicamentoSyncService catalogoMedicamentoSyncService;
 
     public AtendimentoController(AtendimentoLocalService atendimentoService,
@@ -37,12 +40,14 @@ public class AtendimentoController {
                                  OutboxSyncService outboxSyncService,
                                  MedicamentoRepository medicamentoRepository,
                                  PacienteRepository pacienteRepository,
+                                 ProntuarioRepository prontuarioRepository,
                                  CatalogoMedicamentoSyncService catalogoMedicamentoSyncService) {
         this.atendimentoService = atendimentoService;
         this.networkSimulator = networkSimulator;
         this.outboxSyncService = outboxSyncService;
         this.medicamentoRepository = medicamentoRepository;
         this.pacienteRepository = pacienteRepository;
+        this.prontuarioRepository = prontuarioRepository;
         this.catalogoMedicamentoSyncService = catalogoMedicamentoSyncService;
     }
 
@@ -53,21 +58,22 @@ public class AtendimentoController {
             return "redirect:/login";
         }
 
-        // Atualiza o catálogo da Central caso o simulador esteja online
         catalogoMedicamentoSyncService.sincronizarCatalogoDaNuvem();
 
         FichaAtendimento ficha = new FichaAtendimento();
+        ficha.setProntuario(new Prontuario());
 
         if (pacienteId != null) {
             pacienteRepository.findById(pacienteId).ifPresent(p -> {
                 ficha.setPaciente(p);
                 ficha.setNomePaciente(p.getNome());
                 ficha.setDocumentoPaciente(p.getCpf());
+                prontuarioRepository.findByPacienteId(p.getId())
+                        .ifPresent(ficha::setProntuario);
             });
         }
 
         List<Medicamento> medicamentos = medicamentoRepository.findAll(Sort.by("nome"));
-        System.out.println(">>> [ATENDIMENTO] Enviando " + medicamentos.size() + " medicamento(s) para a tela.");
 
         model.addAttribute("ficha", ficha);
         model.addAttribute("usuario", usuarioLogado);

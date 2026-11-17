@@ -3,6 +3,7 @@ package com.example.medicalfield_central_service.dto;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -36,4 +37,28 @@ public class FichaSyncRequestDto {
 
     private String profissionalRegistro;
     private LocalDateTime dataHoraAtendimento;
+
+    private PacienteSyncDto paciente;
+    private ProntuarioSyncDto prontuario;
+
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class PacienteSyncDto {
+        private UUID id;
+        private String nome;
+        private String cpf;
+        private LocalDate dataNascimento;
+    }
+
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class ProntuarioSyncDto {
+        private UUID id;
+        private String tipoSanguineo;
+        private String alergias;
+        private String comorbidades;
+        private String medicamentosUsoContinuo;
+        private LocalDateTime dataCriacao;
+        private LocalDateTime updatedAt;
+    }
 }

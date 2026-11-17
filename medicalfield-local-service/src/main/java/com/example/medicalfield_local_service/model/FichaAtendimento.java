@@ -45,7 +45,7 @@ public class FichaAtendimento {
 
     // 5 & 6. Tratamento e Observações
     private String medicamentos;
-    
+
     @Column(columnDefinition = "TEXT")
     private String observacoes;
 
@@ -57,7 +57,11 @@ public class FichaAtendimento {
     @Enumerated(EnumType.STRING)
     private StatusSync statusSync;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "paciente_id")
     private Paciente paciente;
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "prontuario_id")
+    private Prontuario prontuario;
 }
