@@ -22,7 +22,7 @@ public class CatalogoMedicamentoSyncService {
     private final NetworkSimulator networkSimulator;
     private final RestClient restClient;
 
-    @Value("${central.medicamentos.url:http://localhost:8081/api/v1/medicamentos}")
+    @Value("${central.medicamentos.url:http://177.44.248.70:8081/api/v1/medicamentos}")
     private String centralMedicamentosUrl;
 
     public CatalogoMedicamentoSyncService(MedicamentoRepository medicamentoRepository,
