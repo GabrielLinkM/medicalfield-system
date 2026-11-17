@@ -1,0 +1,40 @@
+<mxfile host="Electron">
+  <diagram name="Página-1" id="Ben-CqF2evhmgmhIYgYW">
+    <mxGraphModel dx="1414" dy="841" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="emIQAp6aG2vNZvIacvdG-1" parent="1" style="whiteSpace=wrap;html=1;aspect=fixed;" value="" vertex="1">
+          <mxGeometry height="330" width="330" x="440" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="emIQAp6aG2vNZvIacvdG-2" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontSize=18;" value="Máquina Virtual" vertex="1">
+          <mxGeometry height="40" width="130" x="540" y="260" as="geometry" />
+        </mxCell>
+        <mxCell id="emIQAp6aG2vNZvIacvdG-4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;roundedPerimeter=1;" value="Microserviço 1" vertex="1">
+          <mxGeometry height="60" width="120" x="470" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="emIQAp6aG2vNZvIacvdG-5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;roundedPerimeter=1;" value="Microserviço 2" vertex="1">
+          <mxGeometry height="60" width="120" x="470" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="emIQAp6aG2vNZvIacvdG-6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;roundedPerimeter=1;" value="Microserviço 3" vertex="1">
+          <mxGeometry height="60" width="120" x="470" y="510" as="geometry" />
+        </mxCell>
+        <mxCell id="emIQAp6aG2vNZvIacvdG-7" parent="1" style="rounded=1;whiteSpace=wrap;html=1;roundedPerimeter=1;" value="Banco de dados" vertex="1">
+          <mxGeometry height="60" width="120" x="630" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="emIQAp6aG2vNZvIacvdG-9" parent="1" style="whiteSpace=wrap;html=1;aspect=fixed;" value="" vertex="1">
+          <mxGeometry height="330" width="330" x="30" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="emIQAp6aG2vNZvIacvdG-10" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontSize=18;" value="Sistema Local" vertex="1">
+          <mxGeometry height="40" width="130" x="130" y="260" as="geometry" />
+        </mxCell>
+        <mxCell id="emIQAp6aG2vNZvIacvdG-11" parent="1" style="rounded=1;whiteSpace=wrap;html=1;roundedPerimeter=1;" value="Sistema Web" vertex="1">
+          <mxGeometry height="60" width="120" x="50" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="emIQAp6aG2vNZvIacvdG-12" parent="1" style="rounded=1;whiteSpace=wrap;html=1;roundedPerimeter=1;" value="Banco de dados" vertex="1">
+          <mxGeometry height="60" width="120" x="50" y="435" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,13 @@
+.env
+target/
+build/
+node_modules/
+__pycache__/
+venv/
+.venv/
+*.jar
+*.db
+*.sqlite
+*.pdf
+.idea/
+.vscode/
