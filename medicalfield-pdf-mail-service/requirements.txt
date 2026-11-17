@@ -1,8 +1,4 @@
 fastapi
 uvicorn
 fpdf2
-<<<<<<< HEAD
 pydantic
-=======
-pydantic
->>>>>>> 6e9023f7f420f8a5d73d9bd5dc998105fb543f3e
