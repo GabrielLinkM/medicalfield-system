@@ -8,6 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 8082;
+const API_KEY = process.env.MEDICALFIELD_API_KEY || 'medicalfield-secret-key-2026';
 
 const pool = new Pool({
     host: process.env.DB_HOST || 'localhost',
@@ -15,6 +16,15 @@ const pool = new Pool({
     database: process.env.DB_NAME || 'medicalfield_audit',
     user: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD || 'postgres'
+});
+
+// Middleware de autenticacao via X-API-Key
+app.use('/api/v1', (req, res, next) => {
+    const providedKey = req.header('X-API-Key');
+    if (!providedKey || providedKey !== API_KEY) {
+        return res.status(401).json({ erro: 'Acesso nao autorizado: X-API-Key ausente ou invalida.' });
+    }
+    next();
 });
 
 // Inicializa a tabela de auditoria automaticamente
@@ -45,7 +55,6 @@ app.post('/api/v1/auditoria/eventos', async (req, res) => {
     try {
         const { tipoEvento, origem, entidadeId, ator, detalhes, payload } = req.body;
 
-        // Busca o hash do último registro para encadeamento
         const ultimo = await pool.query('SELECT hash_atual FROM audit_logs ORDER BY id DESC LIMIT 1');
         const hashAnterior = ultimo.rows.length > 0 ? ultimo.rows[0].hash_atual : '0'.repeat(64);
 

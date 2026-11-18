@@ -3,15 +3,25 @@ import smtplib
 from datetime import datetime
 from email.message import EmailMessage
 from typing import Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from fpdf import FPDF
 
 app = FastAPI(title="MedicalField - Servico de PDF e Email")
 
+API_KEY = os.getenv("MEDICALFIELD_API_KEY", "medicalfield-secret-key-2026")
+
 PDF_DIR = "pdfs"
 os.makedirs(PDF_DIR, exist_ok=True)
+
+
+def verificar_api_key(x_api_key: Optional[str] = Header(None, alias="X-API-Key")):
+    if not x_api_key or x_api_key != API_KEY:
+        raise HTTPException(
+            status_code=401,
+            detail="Acesso nao autorizado: X-API-Key ausente ou invalida."
+        )
 
 
 class FichaPayload(BaseModel):
@@ -132,7 +142,7 @@ def enviar_email_com_pdf(destinatario: str, ficha: FichaPayload, caminho_pdf: st
     return msg
 
 
-@app.post("/api/v1/documentos/gerar-e-enviar")
+@app.post("/api/v1/documentos/gerar-e-enviar", dependencies=[Depends(verificar_api_key)])
 def processar_ficha(ficha: FichaPayload):
     try:
         caminho_pdf = gerar_pdf_ficha(ficha)
@@ -150,12 +160,13 @@ def processar_ficha(ficha: FichaPayload):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/v1/documentos/{ficha_id}/pdf")
+@app.get("/api/v1/documentos/{ficha_id}/pdf", dependencies=[Depends(verificar_api_key)])
 def baixar_pdf(ficha_id: str):
     caminho_pdf = os.path.join(PDF_DIR, f"ficha_{ficha_id}.pdf")
     if not os.path.exists(caminho_pdf):
         raise HTTPException(status_code=404, detail="PDF nao encontrado para esta ficha.")
     return FileResponse(caminho_pdf, media_type="application/pdf", filename=f"ficha_{ficha_id}.pdf")
+
 
 if __name__ == "__main__":
     import uvicorn

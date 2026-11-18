@@ -29,6 +29,9 @@ public class AtendimentoSyncController {
     @Value("${pdf.service.url:http://localhost:8083/api/v1/documentos/gerar-e-enviar}")
     private String pdfServiceUrl;
 
+    @Value("${medicalfield.api.key:medicalfield-secret-key-2026}")
+    private String apiKey;
+
     public AtendimentoSyncController(FichaAtendimentoCentralRepository repository,
                                      ProntuarioCentralRepository prontuarioRepository) {
         this.repository = repository;
@@ -40,10 +43,8 @@ public class AtendimentoSyncController {
     public ResponseEntity<Void> receberFichaSincronizada(@RequestBody FichaSyncRequestDto dto) {
         LocalDateTime agora = LocalDateTime.now();
 
-        // 1. Persiste ou atualiza o Prontuário Clínico vinculado ao Paciente
         ProntuarioCentral prontuarioCentral = resolverProntuario(dto, agora);
 
-        // 2. Persiste a Ficha de Atendimento vinculada ao Prontuário
         FichaAtendimentoCentral fichaCentral = FichaAtendimentoCentral.builder()
                 .id(dto.getId() != null ? dto.getId() : UUID.randomUUID())
                 .nomePaciente(dto.getNomePaciente())
@@ -86,9 +87,11 @@ public class AtendimentoSyncController {
         FichaSyncRequestDto.ProntuarioSyncDto pDto = dto.getProntuario();
         FichaSyncRequestDto.PacienteSyncDto pacDto = dto.getPaciente();
 
-        String cpf = (dto.getDocumentoPaciente() != null && !dto.getDocumentoPaciente().isBlank())
+        String cpfBruto = (dto.getDocumentoPaciente() != null && !dto.getDocumentoPaciente().isBlank())
                 ? dto.getDocumentoPaciente().trim()
                 : (pacDto != null ? pacDto.getCpf() : null);
+
+        String cpf = normalizarCpf(cpfBruto);
 
         String nome = (dto.getNomePaciente() != null && !dto.getNomePaciente().isBlank())
                 ? dto.getNomePaciente().trim()
@@ -99,11 +102,14 @@ public class AtendimentoSyncController {
         if (pDto != null && pDto.getId() != null) {
             prontuario = prontuarioRepository.findById(pDto.getId()).orElse(null);
         }
-        if (prontuario == null && cpf != null && !cpf.isBlank()) {
+        if (prontuario == null && cpf != null) {
             prontuario = prontuarioRepository.findFirstByDocumentoPaciente(cpf).orElse(null);
         }
         if (prontuario == null && nome != null && !nome.isBlank()) {
-            prontuario = prontuarioRepository.findFirstByNomePacienteIgnoreCase(nome).orElse(null);
+            ProntuarioCentral porNome = prontuarioRepository.findFirstByNomePacienteIgnoreCase(nome).orElse(null);
+            if (porNome != null && (cpf == null || porNome.getDocumentoPaciente() == null || porNome.getDocumentoPaciente().isBlank())) {
+                prontuario = porNome;
+            }
         }
 
         if (prontuario == null) {
@@ -114,7 +120,7 @@ public class AtendimentoSyncController {
         }
 
         prontuario.setNomePaciente(nome);
-        if (cpf != null && !cpf.isBlank()) {
+        if (cpf != null) {
             prontuario.setDocumentoPaciente(cpf);
         }
         if (pacDto != null && pacDto.getDataNascimento() != null) {
@@ -152,6 +158,7 @@ public class AtendimentoSyncController {
 
             restClient.post()
                     .uri(auditServiceUrl)
+                    .header("X-API-Key", apiKey)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(eventoAudit)
                     .retrieve()
@@ -165,6 +172,7 @@ public class AtendimentoSyncController {
         try {
             restClient.post()
                     .uri(pdfServiceUrl)
+                    .header("X-API-Key", apiKey)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(ficha)
                     .retrieve()
@@ -172,5 +180,13 @@ public class AtendimentoSyncController {
         } catch (Exception e) {
             System.err.println(">>> [AVISO] Falha ao notificar Microsservico de PDF/Email: " + e.getMessage());
         }
+    }
+
+    private String normalizarCpf(String cpf) {
+        if (cpf == null || cpf.isBlank()) {
+            return null;
+        }
+        String digits = cpf.replaceAll("\\D", "");
+        return digits.isEmpty() ? cpf.trim() : digits;
     }
 }

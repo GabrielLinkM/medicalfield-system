@@ -36,6 +36,9 @@ public class AdminCentralController {
     @Value("${pdf.base.url:http://localhost:8083/api/v1/documentos}")
     private String pdfBaseUrl;
 
+    @Value("${medicalfield.api.key:medicalfield-secret-key-2026}")
+    private String apiKey;
+
     public AdminCentralController(FichaAtendimentoCentralRepository fichaRepository,
                                   MedicamentoCentralRepository medicamentoRepository,
                                   ProntuarioCentralRepository prontuarioRepository) {
@@ -60,25 +63,16 @@ public class AdminCentralController {
                 Sort.by(Sort.Direction.DESC, "updatedAt")
         );
 
-        // Agrupa pacientes únicos a partir das fichas sincronizadas e vincula o prontuário existente
         Map pacientesMap = new LinkedHashMap();
         for (FichaAtendimentoCentral f : atendimentos) {
-            String cpfLimpo = (f.getDocumentoPaciente() != null && !f.getDocumentoPaciente().isBlank())
-                    ? f.getDocumentoPaciente().trim()
-                    : null;
+            String cpfLimpo = normalizarCpf(f.getDocumentoPaciente());
 
             String chave = (cpfLimpo != null)
                     ? cpfLimpo
                     : (f.getNomePaciente() != null ? f.getNomePaciente().trim().toLowerCase() : f.getId().toString());
 
             if (!pacientesMap.containsKey(chave)) {
-                ProntuarioCentral prontuarioExistente = null;
-                if (cpfLimpo != null) {
-                    prontuarioExistente = prontuarioRepository.findFirstByDocumentoPaciente(cpfLimpo).orElse(null);
-                }
-                if (prontuarioExistente == null && f.getNomePaciente() != null && !f.getNomePaciente().isBlank()) {
-                    prontuarioExistente = prontuarioRepository.findFirstByNomePacienteIgnoreCase(f.getNomePaciente().trim()).orElse(null);
-                }
+                ProntuarioCentral prontuarioExistente = buscarProntuarioCompativel(f.getNomePaciente(), cpfLimpo);
 
                 Map p = new HashMap();
                 p.put("nome", f.getNomePaciente() != null ? f.getNomePaciente() : "Não identificado");
@@ -97,11 +91,8 @@ public class AdminCentralController {
             existente.put("totalAtendimentos", (int) existente.get("totalAtendimentos") + 1);
         }
 
-        // Garante que pacientes cadastrados diretamente no painel ou via prontuário apareçam na lista
         for (ProntuarioCentral pront : prontuarios) {
-            String cpfLimpo = (pront.getDocumentoPaciente() != null && !pront.getDocumentoPaciente().isBlank())
-                    ? pront.getDocumentoPaciente().trim()
-                    : null;
+            String cpfLimpo = normalizarCpf(pront.getDocumentoPaciente());
 
             String chave = (cpfLimpo != null)
                     ? cpfLimpo
@@ -131,11 +122,13 @@ public class AdminCentralController {
         try {
             logsAuditoria = restClient.get()
                     .uri(auditBaseUrl)
+                    .header("X-API-Key", apiKey)
                     .retrieve()
                     .body(List.class);
 
             statusIntegridade = restClient.get()
                     .uri(auditBaseUrl + "/integridade")
+                    .header("X-API-Key", apiKey)
                     .retrieve()
                     .body(Map.class);
 
@@ -165,13 +158,7 @@ public class AdminCentralController {
         String nomeLimpo = nomePaciente != null ? nomePaciente.trim() : "Não identificado";
         String cpfLimpo = normalizarCpf(documentoPaciente);
 
-        ProntuarioCentral registro = null;
-        if (cpfLimpo != null) {
-            registro = prontuarioRepository.findFirstByDocumentoPaciente(cpfLimpo).orElse(null);
-        }
-        if (registro == null && !nomeLimpo.isBlank()) {
-            registro = prontuarioRepository.findFirstByNomePacienteIgnoreCase(nomeLimpo).orElse(null);
-        }
+        ProntuarioCentral registro = buscarProntuarioCompativel(nomeLimpo, cpfLimpo);
 
         boolean jaExistia = (registro != null);
         if (!jaExistia) {
@@ -219,11 +206,8 @@ public class AdminCentralController {
         if (id != null) {
             prontuario = prontuarioRepository.findById(id).orElse(null);
         }
-        if (prontuario == null && cpfLimpo != null) {
-            prontuario = prontuarioRepository.findFirstByDocumentoPaciente(cpfLimpo).orElse(null);
-        }
-        if (prontuario == null && !nomeLimpo.isBlank()) {
-            prontuario = prontuarioRepository.findFirstByNomePacienteIgnoreCase(nomeLimpo).orElse(null);
+        if (prontuario == null) {
+            prontuario = buscarProntuarioCompativel(nomeLimpo, cpfLimpo);
         }
 
         if (prontuario == null) {
@@ -302,6 +286,7 @@ public class AdminCentralController {
 
             Map resposta = restClient.post()
                     .uri(pdfBaseUrl + "/gerar-e-enviar")
+                    .header("X-API-Key", apiKey)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(payload)
                     .retrieve()
@@ -321,6 +306,7 @@ public class AdminCentralController {
         try {
             byte[] pdfBytes = restClient.get()
                     .uri(pdfBaseUrl + "/" + id + "/pdf")
+                    .header("X-API-Key", apiKey)
                     .retrieve()
                     .body(byte[].class);
 
@@ -332,6 +318,25 @@ public class AdminCentralController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
+    }
+
+    private ProntuarioCentral buscarProntuarioCompativel(String nomeLimpo, String cpfLimpo) {
+        if (cpfLimpo != null) {
+            ProntuarioCentral porCpf = prontuarioRepository.findFirstByDocumentoPaciente(cpfLimpo).orElse(null);
+            if (porCpf != null) {
+                return porCpf;
+            }
+            if (nomeLimpo != null && !nomeLimpo.isBlank()) {
+                ProntuarioCentral porNome = prontuarioRepository.findFirstByNomePacienteIgnoreCase(nomeLimpo.trim()).orElse(null);
+                if (porNome != null && (porNome.getDocumentoPaciente() == null || porNome.getDocumentoPaciente().isBlank())) {
+                    return porNome;
+                }
+            }
+            return null;
+        }
+        return (nomeLimpo != null && !nomeLimpo.isBlank())
+                ? prontuarioRepository.findFirstByNomePacienteIgnoreCase(nomeLimpo.trim()).orElse(null)
+                : null;
     }
 
     private String normalizarCpf(String documentoPaciente) {
