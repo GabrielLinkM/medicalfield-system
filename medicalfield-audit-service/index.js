@@ -87,7 +87,26 @@ app.post('/api/v1/auditoria/eventos', async (req, res) => {
 app.get('/api/v1/auditoria', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM audit_logs ORDER BY id DESC');
-        res.json(result.rows);
+        const logs = result.rows.map(row => {
+            const data = row.registrado_em || row.criado_em || row.data_hora || row.created_at || row.timestamp;
+            const evento = row.tipo_evento || row.evento || row.acao;
+            const idRef = row.entidade_id || row.ficha_id || row.atendimento_id;
+            const hAnt = row.hash_anterior || row.previous_hash;
+            const hAtu = row.hash_atual || row.current_hash || row.hash;
+
+            return {
+                ...row,
+                registradoEm: data,
+                dataHora: data,
+                tipoEvento: evento,
+                evento: evento,
+                entidadeId: idRef,
+                fichaId: idRef,
+                hashAnterior: hAnt,
+                hashAtual: hAtu
+            };
+        });
+        res.json(logs);
     } catch (err) {
         res.status(500).json({ erro: err.message });
     }
