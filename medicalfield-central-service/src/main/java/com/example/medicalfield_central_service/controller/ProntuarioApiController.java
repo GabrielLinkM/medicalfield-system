@@ -30,13 +30,16 @@ public class ProntuarioApiController {
                 repository.findAll(Sort.by(Sort.Direction.DESC, "updatedAt"))
         );
 
-        Set<String> chavesExistentes = new HashSet<>();
+        Set<String> cpfsExistentes = new HashSet<>();
+        Set<String> nomesExistentes = new HashSet<>();
+
         for (ProntuarioCentral p : resultado) {
-            if (p.getDocumentoPaciente() != null && !p.getDocumentoPaciente().isBlank()) {
-                chavesExistentes.add(p.getDocumentoPaciente().trim());
+            String cpfNorm = normalizarCpf(p.getDocumentoPaciente());
+            if (cpfNorm != null) {
+                cpfsExistentes.add(cpfNorm);
             }
             if (p.getNomePaciente() != null && !p.getNomePaciente().isBlank()) {
-                chavesExistentes.add(p.getNomePaciente().trim().toLowerCase());
+                nomesExistentes.add(p.getNomePaciente().trim().toLowerCase());
             }
         }
 
@@ -44,29 +47,33 @@ public class ProntuarioApiController {
                 Sort.by(Sort.Direction.DESC, "sincronizadoEm")
         );
         for (FichaAtendimentoCentral f : fichas) {
-            String cpf = (f.getDocumentoPaciente() != null && !f.getDocumentoPaciente().isBlank())
-                    ? f.getDocumentoPaciente().trim()
-                    : null;
+            String cpfNorm = normalizarCpf(f.getDocumentoPaciente());
             String nome = (f.getNomePaciente() != null && !f.getNomePaciente().isBlank())
                     ? f.getNomePaciente().trim()
                     : null;
 
-            if (nome == null) continue;
+            if (nome == null) {
+                continue;
+            }
 
-            boolean jaExiste = (cpf != null && chavesExistentes.contains(cpf))
-                    || chavesExistentes.contains(nome.toLowerCase());
+            // Se possui CPF, verifica duplicidade apenas pelo CPF (preserva homônimos com CPFs diferentes)
+            boolean jaExiste = (cpfNorm != null)
+                    ? cpfsExistentes.contains(cpfNorm)
+                    : nomesExistentes.contains(nome.toLowerCase());
 
             if (!jaExiste) {
                 resultado.add(ProntuarioCentral.builder()
                         .id(UUID.randomUUID())
                         .nomePaciente(nome)
-                        .documentoPaciente(cpf)
+                        .documentoPaciente(cpfNorm)
                         .dataCriacao(f.getDataHoraAtendimento())
                         .updatedAt(f.getSincronizadoEm())
                         .build());
 
-                if (cpf != null) chavesExistentes.add(cpf);
-                chavesExistentes.add(nome.toLowerCase());
+                if (cpfNorm != null) {
+                    cpfsExistentes.add(cpfNorm);
+                }
+                nomesExistentes.add(nome.toLowerCase());
             }
         }
 
@@ -83,6 +90,52 @@ public class ProntuarioApiController {
     @PostMapping
     public ResponseEntity<ProntuarioCentral> salvar(@RequestBody ProntuarioCentral prontuario) {
         LocalDateTime agora = LocalDateTime.now();
+
+        String cpfLimpo = normalizarCpf(prontuario.getDocumentoPaciente());
+        prontuario.setDocumentoPaciente(cpfLimpo);
+
+        ProntuarioCentral existente = null;
+
+        if (prontuario.getId() != null) {
+            existente = repository.findById(prontuario.getId()).orElse(null);
+        }
+        if (existente == null && cpfLimpo != null) {
+            existente = repository.findFirstByDocumentoPaciente(cpfLimpo).orElse(null);
+        }
+        if (existente == null && prontuario.getNomePaciente() != null && !prontuario.getNomePaciente().isBlank()) {
+            ProntuarioCentral porNome = repository.findFirstByNomePacienteIgnoreCase(prontuario.getNomePaciente().trim()).orElse(null);
+            // Só vincula por nome se o registro existente ainda não tiver CPF
+            if (porNome != null && (porNome.getDocumentoPaciente() == null || porNome.getDocumentoPaciente().isBlank())) {
+                existente = porNome;
+            }
+        }
+
+        if (existente != null) {
+            if (prontuario.getNomePaciente() != null && !prontuario.getNomePaciente().isBlank()) {
+                existente.setNomePaciente(prontuario.getNomePaciente().trim());
+            }
+            if (cpfLimpo != null) {
+                existente.setDocumentoPaciente(cpfLimpo);
+            }
+            if (prontuario.getDataNascimentoPaciente() != null) {
+                existente.setDataNascimentoPaciente(prontuario.getDataNascimentoPaciente());
+            }
+            if (prontuario.getTipoSanguineo() != null && !prontuario.getTipoSanguineo().isBlank()) {
+                existente.setTipoSanguineo(prontuario.getTipoSanguineo().trim());
+            }
+            if (prontuario.getAlergias() != null && !prontuario.getAlergias().isBlank()) {
+                existente.setAlergias(prontuario.getAlergias().trim());
+            }
+            if (prontuario.getComorbidades() != null && !prontuario.getComorbidades().isBlank()) {
+                existente.setComorbidades(prontuario.getComorbidades().trim());
+            }
+            if (prontuario.getMedicamentosUsoContinuo() != null && !prontuario.getMedicamentosUsoContinuo().isBlank()) {
+                existente.setMedicamentosUsoContinuo(prontuario.getMedicamentosUsoContinuo().trim());
+            }
+            existente.setUpdatedAt(agora);
+            return ResponseEntity.ok(repository.save(existente));
+        }
+
         if (prontuario.getId() == null) {
             prontuario.setId(UUID.randomUUID());
         }
@@ -91,5 +144,13 @@ public class ProntuarioApiController {
         }
         prontuario.setUpdatedAt(agora);
         return ResponseEntity.ok(repository.save(prontuario));
+    }
+
+    private String normalizarCpf(String cpf) {
+        if (cpf == null || cpf.isBlank()) {
+            return null;
+        }
+        String digits = cpf.replaceAll("\\D", "");
+        return digits.isEmpty() ? cpf.trim() : digits;
     }
 }

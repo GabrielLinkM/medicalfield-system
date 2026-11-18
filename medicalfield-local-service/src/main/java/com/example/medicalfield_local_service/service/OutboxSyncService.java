@@ -115,7 +115,7 @@ public class OutboxSyncService {
         // Passo A: Busca pacientes/prontuários da Central e importa para o banco local
         try {
             Map<String, Object>[] listaCentral = restTemplate.getForObject(urlProntuarios, Map[].class);
-            List<Paciente> locaisAtuais = pacienteRepository.findAll();
+            List<Paciente> locaisAtuais = new ArrayList<>(pacienteRepository.findAll());
 
             if (listaCentral != null) {
                 for (Map<String, Object> item : listaCentral) {
@@ -130,18 +130,7 @@ public class OutboxSyncService {
                         String chave = (cpfCentral != null) ? cpfCentral : nomeCentral.toLowerCase();
                         mapaCentralPorChave.put(chave, item);
 
-                        Paciente pacienteLocal = null;
-                        if (cpfCentral != null) {
-                            pacienteLocal = pacienteRepository.findByCpf(cpfCentral).orElse(null);
-                        }
-                        if (pacienteLocal == null) {
-                            for (Paciente p : locaisAtuais) {
-                                if (p.getNome() != null && p.getNome().trim().equalsIgnoreCase(nomeCentral)) {
-                                    pacienteLocal = p;
-                                    break;
-                                }
-                            }
-                        }
+                        Paciente pacienteLocal = localizarPacienteCompativel(locaisAtuais, nomeCentral, cpfCentral);
 
                         LocalDate dataNasc = null;
                         if (item.get("dataNascimentoPaciente") != null && !item.get("dataNascimentoPaciente").toString().isBlank()) {
@@ -159,9 +148,19 @@ public class OutboxSyncService {
                                     .build());
                             locaisAtuais.add(pacienteLocal);
                             recebidos++;
-                        } else if (pacienteLocal.getDataNascimento() == null && dataNasc != null) {
-                            pacienteLocal.setDataNascimento(dataNasc);
-                            pacienteRepository.save(pacienteLocal);
+                        } else {
+                            boolean alterou = false;
+                            if (pacienteLocal.getCpf() == null && cpfCentral != null) {
+                                pacienteLocal.setCpf(cpfCentral);
+                                alterou = true;
+                            }
+                            if (pacienteLocal.getDataNascimento() == null && dataNasc != null) {
+                                pacienteLocal.setDataNascimento(dataNasc);
+                                alterou = true;
+                            }
+                            if (alterou) {
+                                pacienteRepository.save(pacienteLocal);
+                            }
                         }
 
                         atualizarProntuarioLocalSeNecessario(pacienteLocal, item);
@@ -229,6 +228,43 @@ public class OutboxSyncService {
         }
 
         return new int[]{enviados, recebidos};
+    }
+
+    /**
+     * Garante que homônimos (mesmo nome, CPFs diferentes) NÃO sejam mesclados.
+     */
+    private Paciente localizarPacienteCompativel(List<Paciente> locais, String nomeCentral, String cpfCentral) {
+        if (cpfCentral != null) {
+            // 1. Busca exata pelo CPF normalizado
+            for (Paciente p : locais) {
+                String cpfLocal = normalizarCpf(p.getCpf());
+                if (cpfCentral.equals(cpfLocal)) {
+                    return p;
+                }
+            }
+            // 2. Só vincula por nome se o registro local ainda NÃO tiver CPF preenchido
+            for (Paciente p : locais) {
+                String cpfLocal = normalizarCpf(p.getCpf());
+                if (cpfLocal == null && p.getNome() != null && p.getNome().trim().equalsIgnoreCase(nomeCentral)) {
+                    return p;
+                }
+            }
+            return null;
+        }
+
+        // Quando o paciente da Central não possui CPF, busca por nome entre registros sem CPF (ou qualquer homônimo se único)
+        for (Paciente p : locais) {
+            String cpfLocal = normalizarCpf(p.getCpf());
+            if (cpfLocal == null && p.getNome() != null && p.getNome().trim().equalsIgnoreCase(nomeCentral)) {
+                return p;
+            }
+        }
+        for (Paciente p : locais) {
+            if (p.getNome() != null && p.getNome().trim().equalsIgnoreCase(nomeCentral)) {
+                return p;
+            }
+        }
+        return null;
     }
 
     private void atualizarProntuarioLocalSeNecessario(Paciente paciente, Map<String, Object> itemCentral) {
