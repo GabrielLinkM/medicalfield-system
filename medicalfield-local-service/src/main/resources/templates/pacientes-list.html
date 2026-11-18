@@ -16,7 +16,9 @@
         .alert-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; padding: 12px; border-radius: 6px; margin-bottom: 15px; font-weight: bold; }
 
         .action-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; gap: 10px; flex-wrap: wrap; }
-        .btn-group-top { display: flex; gap: 10px; }
+        .btn-group-top { display: flex; gap: 10px; flex-wrap: wrap; }
+        .btn-sync { background-color: #17a2b8; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; }
+        .btn-sync:hover { background-color: #138496; }
         .btn-register-patient { background-color: #0275d8; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; }
         .btn-new-atendimento { background-color: #28a745; color: white; text-decoration: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; display: inline-block; font-size: 14px; }
         .btn-toggle { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; }
@@ -88,6 +90,10 @@
         <div class="action-bar">
             <h3 style="margin: 0;">Pacientes Cadastrados no Banco Local</h3>
             <div class="btn-group-top">
+                <form th:action="@{/pacientes/sincronizar}" method="post" style="margin: 0;"
+                      onsubmit="const btn = this.querySelector('button'); btn.disabled = true; btn.innerText = 'Sincronizando...';">
+                    <button type="submit" class="btn-sync">🔄 Sincronizar Informações</button>
+                </form>
                 <button type="button" class="btn-register-patient" onclick="toggleCadastroPaciente()">+ Cadastrar Paciente</button>
                 <a th:href="@{/atendimento/novo}" class="btn-new-atendimento">+ Atendimento Avulso</a>
             </div>

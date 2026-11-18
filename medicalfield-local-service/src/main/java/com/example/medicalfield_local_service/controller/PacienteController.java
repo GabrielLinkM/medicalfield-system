@@ -5,6 +5,7 @@ import com.example.medicalfield_local_service.model.FichaAtendimento;
 import com.example.medicalfield_local_service.model.Paciente;
 import com.example.medicalfield_local_service.repository.FichaAtendimentoRepository;
 import com.example.medicalfield_local_service.repository.PacienteRepository;
+import com.example.medicalfield_local_service.service.OutboxSyncService;
 import com.example.medicalfield_local_service.simulator.NetworkSimulator;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -28,13 +29,16 @@ public class PacienteController {
     private final PacienteRepository pacienteRepository;
     private final FichaAtendimentoRepository fichaRepository;
     private final NetworkSimulator networkSimulator;
+    private final OutboxSyncService outboxSyncService;
 
     public PacienteController(PacienteRepository pacienteRepository,
                               FichaAtendimentoRepository fichaRepository,
-                              NetworkSimulator networkSimulator) {
+                              NetworkSimulator networkSimulator,
+                              OutboxSyncService outboxSyncService) {
         this.pacienteRepository = pacienteRepository;
         this.fichaRepository = fichaRepository;
         this.networkSimulator = networkSimulator;
+        this.outboxSyncService = outboxSyncService;
     }
 
     @GetMapping
@@ -94,11 +98,36 @@ public class PacienteController {
                 .dataNascimento(dataNascimento)
                 .build());
 
+        if (networkSimulator.isOnline()) {
+            outboxSyncService.sincronizarPacientesComCentral();
+        }
+
         if (iniciarAtendimento) {
             return "redirect:/atendimento/novo?pacienteId=" + novo.getId();
         }
 
-        redirectAttributes.addFlashAttribute("sucessoPaciente", "Paciente cadastrado com sucesso!");
+        if (networkSimulator.isOnline()) {
+            redirectAttributes.addFlashAttribute("sucessoPaciente", "Paciente cadastrado e enviado para a Central com sucesso!");
+        } else {
+            redirectAttributes.addFlashAttribute("sucessoPaciente", "Paciente salvo localmente! Clique em 'Sincronizar Informações' quando voltar a ficar online.");
+        }
+        return "redirect:/pacientes";
+    }
+
+    @PostMapping("/sincronizar")
+    public String sincronizarAgora(HttpSession session, RedirectAttributes redirectAttributes) {
+        LoginResponseDto usuarioLogado = (LoginResponseDto) session.getAttribute("usuarioLogado");
+        if (usuarioLogado == null) {
+            return "redirect:/login";
+        }
+
+        if (!networkSimulator.isOnline()) {
+            redirectAttributes.addFlashAttribute("erroPaciente", "Não foi possível sincronizar: o simulador está em modo OFFLINE.");
+            return "redirect:/pacientes";
+        }
+
+        String resumo = outboxSyncService.sincronizarTudo();
+        redirectAttributes.addFlashAttribute("sucessoPaciente", resumo);
         return "redirect:/pacientes";
     }
 }
