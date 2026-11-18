@@ -25,6 +25,9 @@ public class CatalogoMedicamentoSyncService {
     @Value("${central.medicamentos.url:http://177.44.248.70:8081/api/v1/medicamentos}")
     private String centralMedicamentosUrl;
 
+    @Value("${medicalfield.api.key:medicalfield-secret-key-2026}")
+    private String apiKey;
+
     public CatalogoMedicamentoSyncService(MedicamentoRepository medicamentoRepository,
                                           NetworkSimulator networkSimulator) {
         this.medicamentoRepository = medicamentoRepository;
@@ -43,6 +46,7 @@ public class CatalogoMedicamentoSyncService {
         try {
             MedicamentoCentralDto[] listaNuvem = restClient.get()
                     .uri(centralMedicamentosUrl)
+                    .header("X-API-Key", apiKey)
                     .retrieve()
                     .body(MedicamentoCentralDto[].class);
 
