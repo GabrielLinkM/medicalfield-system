@@ -88,7 +88,16 @@ app.get('/api/v1/auditoria', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM audit_logs ORDER BY id DESC');
         const logs = result.rows.map(row => {
-            const data = row.registrado_em || row.criado_em || row.data_hora || row.created_at || row.timestamp;
+            const data = row.registrado_em
+                || row.criado_em
+                || row.data_hora
+                || row.data_registro
+                || row.data_evento
+                || row.data_criacao
+                || row.created_at
+                || row.timestamp
+                || Object.values(row).find(v => v instanceof Date);
+
             const evento = row.tipo_evento || row.evento || row.acao;
             const idRef = row.entidade_id || row.ficha_id || row.atendimento_id;
             const hAnt = row.hash_anterior || row.previous_hash;
@@ -98,6 +107,11 @@ app.get('/api/v1/auditoria', async (req, res) => {
                 ...row,
                 registradoEm: data,
                 dataHora: data,
+                criadoEm: data,
+                createdAt: data,
+                timestamp: data,
+                dataRegistro: data,
+                dataEvento: data,
                 tipoEvento: evento,
                 evento: evento,
                 entidadeId: idRef,
