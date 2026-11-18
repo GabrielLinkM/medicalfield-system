@@ -10,6 +10,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.*;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -134,6 +136,7 @@ public class AdminCentralController {
 
             auditoriaOnline = true;
         } catch (Exception e) {
+            System.err.println(">>> [AVISO] Falha ao consultar Auditoria (" + auditBaseUrl + "): " + e.getMessage());
             statusIntegridade.put("status", "Microsserviço de Auditoria (8082) indisponível");
             statusIntegridade.put("cadeiaIntegra", false);
         }
@@ -177,7 +180,14 @@ public class AdminCentralController {
         }
         registro.setUpdatedAt(agora);
 
-        prontuarioRepository.save(registro);
+        ProntuarioCentral salvo = prontuarioRepository.save(registro);
+
+        registrarAuditoria(
+                jaExistia ? "PACIENTE_ATUALIZADO_CENTRAL" : "PACIENTE_CADASTRADO_CENTRAL",
+                salvo.getId().toString(),
+                "Paciente: " + nomeLimpo + (cpfLimpo != null ? " | CPF: " + cpfLimpo : ""),
+                salvo
+        );
 
         redirectAttributes.addFlashAttribute(
                 "mensagemSucesso",
@@ -230,7 +240,14 @@ public class AdminCentralController {
         prontuario.setMedicamentosUsoContinuo(medicamentosUsoContinuo != null && !medicamentosUsoContinuo.isBlank() ? medicamentosUsoContinuo.trim() : null);
         prontuario.setUpdatedAt(agora);
 
-        prontuarioRepository.save(prontuario);
+        ProntuarioCentral salvo = prontuarioRepository.save(prontuario);
+
+        registrarAuditoria(
+                "PRONTUARIO_SALVO_CENTRAL",
+                salvo.getId().toString(),
+                "Prontuário clínico atualizado para: " + nomeLimpo + (cpfLimpo != null ? " | CPF: " + cpfLimpo : ""),
+                salvo
+        );
 
         redirectAttributes.addFlashAttribute("mensagemSucesso", "Prontuário salvo com sucesso para " + nomeLimpo + "!");
         return "redirect:/admin";
@@ -244,7 +261,15 @@ public class AdminCentralController {
                 .nome(nome.trim())
                 .dosagem(dosagem != null && !dosagem.isBlank() ? dosagem.trim() : null)
                 .build();
-        medicamentoRepository.save(med);
+        MedicamentoCentral salvo = medicamentoRepository.save(med);
+
+        registrarAuditoria(
+                "MEDICAMENTO_CADASTRADO_CENTRAL",
+                salvo.getId() != null ? salvo.getId().toString() : salvo.getNome(),
+                "Medicamento adicionado ao catálogo: " + salvo.getNome() + (salvo.getDosagem() != null ? " (" + salvo.getDosagem() + ")" : ""),
+                salvo
+        );
+
         redirectAttributes.addFlashAttribute("mensagemSucesso", "Medicamento adicionado ao catálogo!");
         return "redirect:/admin";
     }
@@ -252,6 +277,14 @@ public class AdminCentralController {
     @PostMapping("/medicamentos/{id}/excluir")
     public String excluirMedicamento(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
         medicamentoRepository.deleteById(id);
+
+        registrarAuditoria(
+                "MEDICAMENTO_EXCLUIDO_CENTRAL",
+                id.toString(),
+                "Medicamento removido do catálogo (ID: " + id + ")",
+                Map.of("id", id.toString())
+        );
+
         redirectAttributes.addFlashAttribute("mensagemSucesso", "Medicamento removido do catálogo.");
         return "redirect:/admin";
     }
@@ -318,6 +351,36 @@ public class AdminCentralController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
+    }
+
+    private void registrarAuditoria(String tipoEvento, String entidadeId, String detalhes, Object payload) {
+        try {
+            Map<String, Object> eventoAudit = new HashMap<>();
+            eventoAudit.put("tipoEvento", tipoEvento);
+            eventoAudit.put("origem", "medicalfield-central-service");
+            eventoAudit.put("entidadeId", entidadeId);
+            eventoAudit.put("ator", obterAtorAtual());
+            eventoAudit.put("detalhes", detalhes);
+            eventoAudit.put("payload", payload != null ? payload : Map.of());
+
+            restClient.post()
+                    .uri(auditBaseUrl + "/eventos")
+                    .header("X-API-Key", apiKey)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(eventoAudit)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (Exception e) {
+            System.err.println(">>> [AVISO] Falha ao registrar evento na Auditoria (" + tipoEvento + "): " + e.getMessage());
+        }
+    }
+
+    private String obterAtorAtual() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated() && auth.getName() != null) {
+            return auth.getName();
+        }
+        return "ADMIN_CENTRAL";
     }
 
     private ProntuarioCentral buscarProntuarioCompativel(String nomeLimpo, String cpfLimpo) {
